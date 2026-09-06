@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PharmaSys Mobile</string>
+    <string name="title_activity_main">PharmaSys Mobile</string>
+    <string name="package_name">in.co.meenaagencies.pharmasys</string>
+    <string name="custom_url_scheme">in.co.meenaagencies.pharmasys</string>
+</resources>
