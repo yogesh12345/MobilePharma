@@ -42,3 +42,27 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Package iOS Simulator app
+        run: |
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData \
+            -path "*/Build/Products/Debug-iphonesimulator/App.app" \
+            -print -quit)
+
+          echo "App found at: $APP_PATH"
+
+          if [ -z "$APP_PATH" ]; then
+            echo "App.app was not found"
+            exit 1
+          fi
+
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP_PATH" \
+            PharmaSys-Mobile-iOS-Simulator.zip
+
+      - name: Upload iOS Simulator artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PharmaSys-Mobile-iOS-Simulator
+          path: PharmaSys-Mobile-iOS-Simulator.zip
+          retention-days: 14
