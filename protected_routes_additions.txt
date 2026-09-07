@@ -1,0 +1,8 @@
+// Add these inside ProtectedRoutes(...) where the other protected routes are registered:
+
+protected.GET("/mobile/companies", controllers.GetMobileCompanies)
+protected.GET("/mobile/companies/:id/items", controllers.GetMobileCompanyItems)
+protected.PUT("/mobile/companies/:id", controllers.UpdateMobileCompany)
+
+protected.GET("/mobile/customers", controllers.GetMobileCustomers)
+protected.PUT("/mobile/customers/:id/contact", controllers.UpdateMobileCustomerContact)

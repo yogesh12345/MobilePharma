@@ -5,7 +5,14 @@ import GenericAutoComplete from "../components/GenericAutoComplete";
 import type { AutoCompleteItem, ItemDetails } from "../types/item";
 
 interface ItemLocationPageProps {
-  onLogout: () => void;
+  onLogout?: () => void;
+  showHeader?: boolean;
+  rackTarget?: {
+    id: number;
+    itemName: string;
+    requestKey: number;
+  } | null;
+  onRackOperationComplete?: () => void;
 }
 
 type Message = { type: "success" | "error"; text: string } | null;
@@ -18,7 +25,12 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-export default function ItemLocationPage({ onLogout }: ItemLocationPageProps) {
+export default function ItemLocationPage({
+  onLogout,
+  showHeader = true,
+  rackTarget = null,
+  onRackOperationComplete,
+}: ItemLocationPageProps) {
   const [itemQuery, setItemQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<ItemDetails | null>(null);
   const [rackNumber, setRackNumber] = useState("");
@@ -59,7 +71,11 @@ export default function ItemLocationPage({ onLogout }: ItemLocationPageProps) {
       if (!input) return;
 
       input.focus();
-      input.select();
+
+      // Place the caret at the end of the existing Rack No. value.
+      // Do not select/highlight the complete value.
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
     }, 50);
 
     return () => window.clearTimeout(timer);
@@ -74,7 +90,20 @@ export default function ItemLocationPage({ onLogout }: ItemLocationPageProps) {
     }, 0);
   };
 
+  const returnToCompanyList = () => {
+    setSelectedItem(null);
+    setRackNumber("");
+    setItemQuery("");
+    setMessage(null);
+    onRackOperationComplete?.();
+  };
+
   const handleCancel = () => {
+    if (rackTarget && onRackOperationComplete) {
+      returnToCompanyList();
+      return;
+    }
+
     if (selectedItem) {
       setRackNumber(selectedItem.RackNumber ?? "");
     }
@@ -82,14 +111,27 @@ export default function ItemLocationPage({ onLogout }: ItemLocationPageProps) {
     focusAndSelectItemName();
   };
 
-  const handleItemSelect = async (item: AutoCompleteItem) => {
+  const loadItemDetails = async (itemId: string | number, queryText?: string) => {
+    const numericItemId = Number(itemId);
+
+    if (!Number.isFinite(numericItemId) || numericItemId <= 0) {
+      setSelectedItem(null);
+      setRackNumber("");
+      setMessage({ type: "error", text: "Invalid Item ID received." });
+      return;
+    }
+
     try {
       setLoadingItem(true);
       setMessage(null);
-      const response = await API.get<ItemDetails>(`/itemdetail/${item.id}`);
+      if (queryText !== undefined) setItemQuery(queryText);
+      const response = await API.get<ItemDetails>(`/itemdetail/${numericItemId}`);
       const details = response.data;
       setSelectedItem(details);
       setRackNumber(details.RackNumber ?? "");
+      if (queryText === undefined && details.ItemName) {
+        setItemQuery(details.ItemName);
+      }
     } catch (error) {
       setSelectedItem(null);
       setRackNumber("");
@@ -98,6 +140,19 @@ export default function ItemLocationPage({ onLogout }: ItemLocationPageProps) {
       setLoadingItem(false);
     }
   };
+
+  const handleItemSelect = async (item: AutoCompleteItem) => {
+    await loadItemDetails(item.id);
+  };
+
+  // A company item can request direct Rack editing. Load that item automatically
+  // when MobileTabsPage switches to the Update Rack tab.
+  useEffect(() => {
+    if (!rackTarget) return;
+    void loadItemDetails(rackTarget.id, rackTarget.itemName);
+    // requestKey intentionally allows reopening the same item later.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rackTarget?.requestKey]);
 
   const handleUpdate = async () => {
     if (!selectedItem) return;
@@ -111,6 +166,12 @@ export default function ItemLocationPage({ onLogout }: ItemLocationPageProps) {
         current ? { ...current, RackNumber: rackNumber.trim() } : current,
       );
       setRackNumber(rackNumber.trim());
+
+      if (rackTarget && onRackOperationComplete) {
+        returnToCompanyList();
+        return;
+      }
+
       setMessage({ type: "success", text: "Location / Rack No. updated successfully." });
       focusAndSelectItemName();
     } catch (error) {
@@ -129,21 +190,23 @@ export default function ItemLocationPage({ onLogout }: ItemLocationPageProps) {
 
   return (
     <main className="min-h-dvh bg-gray-100 text-gray-800">
-      <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-3 py-3 sm:px-4">
-          <div>
-            <h1 className="text-lg font-bold text-blue-900">PharmaSys</h1>
-            <p className="text-xs font-medium text-blue-700">Item Location</p>
+      {showHeader && (
+        <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-3 py-3 sm:px-4">
+            <div>
+              <h1 className="text-lg font-bold text-blue-900">PharmaSys</h1>
+              <p className="text-xs font-medium text-blue-700">Item Location</p>
+            </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="min-h-10 rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-800 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            >
+              Logout
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="min-h-10 rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-800 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
-          >
-            Logout
-          </button>
-        </div>
-      </header>
+        </header>
+      )}
 
       <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4 sm:py-5">
         <section className="rounded-xl border border-blue-200 bg-white p-4 shadow-md sm:p-5">

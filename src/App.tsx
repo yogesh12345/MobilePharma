@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import LoginPage from "./pages/LoginPage";
-import ItemLocationPage from "./pages/ItemLocationPage";
+import MobileTabsPage from "./pages/MobileTabsPage";
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(
@@ -8,9 +8,22 @@ export default function App() {
   );
 
   useEffect(() => {
-    const handleUnauthorized = () => setAuthenticated(false);
-    window.addEventListener("pharmasys:unauthorized", handleUnauthorized);
-    return () => window.removeEventListener("pharmasys:unauthorized", handleUnauthorized);
+    const handleUnauthorized = () => {
+      localStorage.removeItem("pharmasys_token");
+      setAuthenticated(false);
+    };
+
+    window.addEventListener(
+      "pharmasys:unauthorized",
+      handleUnauthorized,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "pharmasys:unauthorized",
+        handleUnauthorized,
+      );
+    };
   }, []);
 
   const logout = () => {
@@ -19,7 +32,7 @@ export default function App() {
   };
 
   return authenticated ? (
-    <ItemLocationPage onLogout={logout} />
+    <MobileTabsPage onLogout={logout} />
   ) : (
     <LoginPage onLogin={() => setAuthenticated(true)} />
   );
