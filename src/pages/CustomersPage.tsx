@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 
@@ -43,6 +43,10 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [focusCustomerId, setFocusCustomerId] = useState<number | null>(null);
+  const [focusRequestKey, setFocusRequestKey] = useState(0);
+  const customerButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const mobileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -59,7 +63,48 @@ export default function CustomersPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!selected) return;
+
+    const timer = window.setTimeout(() => {
+      const input = mobileInputRef.current;
+      if (!input) return;
+
+      input.focus();
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    }, 100);
+
+    return () => window.clearTimeout(timer);
+  }, [selected]);
+
+  useEffect(() => {
+    if (selected || !focusCustomerId || focusRequestKey <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      const button = customerButtonRefs.current[focusCustomerId];
+      if (!button) return;
+
+      button.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
+      });
+      button.focus({ preventScroll: true });
+    }, 100);
+
+    return () => window.clearTimeout(timer);
+  }, [focusCustomerId, focusRequestKey, selected]);
+
+  const returnToCustomerList = (customerId: number) => {
+    setSelected(null);
+    setMessage("");
+    setFocusCustomerId(customerId);
+    setFocusRequestKey((current) => current + 1);
+  };
+
   const openCustomer = (c: Customer) => {
+    setFocusCustomerId(null);
     setSelected(c);
     setMobile(c.MobileNo ?? "");
     setWhatsapp(c.WhatsappNo ?? "");
@@ -90,14 +135,13 @@ export default function CustomersPage() {
         WhatsappNo: whatsapp.trim(),
         EmailID: email.trim(),
       };
-      setSelected(updated);
       setAreas((current) =>
         current.map((a) => ({
           ...a,
           customers: a.customers.map((c) => (c.id === updated.id ? updated : c)),
         })),
       );
-      setMessage("Customer contact updated successfully.");
+      returnToCustomerList(updated.id);
     } catch (e: any) {
       setMessage(e?.response?.data?.error || "Unable to update customer contact.");
     } finally {
@@ -110,10 +154,7 @@ export default function CustomersPage() {
       <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
         <button
           type="button"
-          onClick={() => {
-            setSelected(null);
-            setMessage("");
-          }}
+          onClick={() => returnToCustomerList(selected.id)}
           className="mb-3 text-sm font-semibold text-blue-700"
         >
           ← Customers
@@ -124,6 +165,7 @@ export default function CustomersPage() {
 
           <div className="grid grid-cols-1 gap-5">
             <FloatingLabelInput
+              ref={mobileInputRef}
               id="custMobile"
               label="Mobile No."
               value={mobile}
@@ -165,12 +207,7 @@ export default function CustomersPage() {
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => {
-                setMobile(selected.MobileNo ?? "");
-                setWhatsapp(selected.WhatsappNo ?? "");
-                setEmail(selected.EmailID ?? "");
-                setMessage("");
-              }}
+              onClick={() => returnToCustomerList(selected.id)}
               className="rounded-md border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700"
             >
               Cancel
@@ -201,15 +238,24 @@ export default function CustomersPage() {
         <div className="rounded-lg bg-white p-4 text-sm shadow-sm">Loading customers...</div>
       ) : (
         <div className="space-y-3">
-          {areas.map((area) => {
+          {areas.map((area, areaIndex) => {
             const key = `${area.AreaCode}|${area.AreaName}`;
             const open = expandedArea === key;
             return (
-              <section key={key} className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
+              <section
+                key={key}
+                className={`overflow-hidden rounded-xl border shadow-sm ${
+                  areaIndex % 2 === 0
+                    ? "border-blue-200 bg-white"
+                    : "border-indigo-200 bg-indigo-50/40"
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => setExpandedArea(open ? "" : key)}
-                  className="flex w-full items-center justify-between gap-3 bg-blue-50 px-3 py-3 text-left"
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-blue-100 ${
+                    areaIndex % 2 === 0 ? "bg-blue-50" : "bg-indigo-100/70"
+                  }`}
                 >
                   <span className="font-bold text-blue-900">
                     {open ? "▼" : "▶"} {area.AreaName}
@@ -230,10 +276,17 @@ export default function CustomersPage() {
                     return (
                       <button
                         key={customer.id}
+                        ref={(element) => {
+                          customerButtonRefs.current[customer.id] = element;
+                        }}
                         type="button"
                         onClick={() => openCustomer(customer)}
                         className={`block w-full border-t border-slate-200 px-3 py-3 text-left transition-colors hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
-                          customerIndex % 2 === 0 ? "bg-white" : "bg-sky-50/70"
+                          focusCustomerId === customer.id
+                            ? "bg-amber-50 ring-2 ring-inset ring-amber-300"
+                            : customerIndex % 2 === 0
+                              ? "bg-white"
+                              : "bg-sky-50/70"
                         }`}
                       >
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">

@@ -16,6 +16,7 @@ type CompanyItem = {
   PTR: number;
   MRP: number;
   PurDate?: string | null;
+  RackNumber?: string | null;
 
   // These may still be returned by /mobile/companies/:id/items,
   // but they are intentionally NOT used for current stock display.
@@ -536,6 +537,10 @@ export default function CompaniesPage({
                       </div>
 
                       <div className="mt-1 flex items-center gap-x-4 text-xs font-medium text-gray-600">
+                        <span>
+                          Rack: {item.RackNumber?.trim() || "-"}
+                        </span>
+
                         <span>
                           PTR: {money(item.PTR)}
                         </span>
