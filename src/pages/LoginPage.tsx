@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import API from "../services/api";
+import API, { setApiToken } from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
+import { setStoredToken } from "../services/storage";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -11,8 +12,15 @@ const getErrorMessage = (error: unknown) => {
   if (typeof error === "object" && error !== null) {
     const maybeAxios = error as {
       response?: { data?: { error?: string } };
+      code?: string;
       message?: string;
     };
+    if (!maybeAxios.response && maybeAxios.message === "Network Error") {
+      return "Unable to connect to PharmaSys API from this app URL. Please check backend CORS access.";
+    }
+    if (maybeAxios.code === "ECONNABORTED") {
+      return "The server took too long to respond. Please try again.";
+    }
     return maybeAxios.response?.data?.error || maybeAxios.message || "Login failed";
   }
   return "Login failed";
@@ -37,10 +45,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const response = await API.post("/login", {
         identifier: identifier.trim(),
         password,
+        clientType: "mobile",
       });
       const token = response.data?.token;
       if (!token) throw new Error("Login succeeded but no token was returned.");
-      localStorage.setItem("pharmasys_token", token);
+      setApiToken(token);
+      await setStoredToken(token);
       onLogin();
     } catch (err) {
       setError(getErrorMessage(err));
