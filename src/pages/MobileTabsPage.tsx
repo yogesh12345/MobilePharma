@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AppTabs, { type MobileTab } from "../components/AppTabs";
 import ItemLocationPage from "./ItemLocationPage";
+import PurchasesPage from "./PurchasesPage";
 import CompaniesPage from "./CompaniesPage";
 import CustomersPage from "./CustomersPage";
 import { ACTIVE_TAB_KEY, getStoredValue, setStoredValue } from "../services/storage";
@@ -13,6 +14,9 @@ type RackTarget = {
   id: number;
   itemName: string;
   requestKey: number;
+  returnTo?: "companies" | "purchases";
+  invoiceId?: number;
+  tranId?: number;
 };
 
 type CompanyFocusTarget = {
@@ -20,8 +24,18 @@ type CompanyFocusTarget = {
   requestKey: number;
 };
 
+type PurchaseFocusTarget = {
+  invoiceId: number;
+  itemId: number;
+  tranId: number;
+  requestKey: number;
+};
+
 const isMobileTab = (value: string | null): value is MobileTab =>
-  value === "rack" || value === "companies" || value === "customers";
+  value === "rack" ||
+  value === "purchases" ||
+  value === "companies" ||
+  value === "customers";
 
 export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   const [activeTab, setActiveTab] = useState<MobileTab>(
@@ -34,6 +48,8 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   const [rackTarget, setRackTarget] = useState<RackTarget | null>(null);
   const [companyFocusTarget, setCompanyFocusTarget] =
     useState<CompanyFocusTarget | null>(null);
+  const [purchaseFocusTarget, setPurchaseFocusTarget] =
+    useState<PurchaseFocusTarget | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -57,6 +73,25 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       id: item.id,
       itemName: item.ItemName,
       requestKey: Date.now(),
+      returnTo: "companies",
+    });
+
+    changeTab("rack");
+  };
+
+  const openPurchaseItemInRack = (item: {
+    id: number;
+    ItemName: string;
+    invoiceId: number;
+    tranId: number;
+  }) => {
+    setRackTarget({
+      id: item.id,
+      itemName: item.ItemName,
+      invoiceId: item.invoiceId,
+      tranId: item.tranId,
+      requestKey: Date.now(),
+      returnTo: "purchases",
     });
 
     changeTab("rack");
@@ -67,16 +102,34 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
    * Return to the already-mounted CompaniesPage so its selected company,
    * search text, loaded items and scroll context are preserved.
    */
-  const returnToCompanyItem = () => {
+  const returnToSourceItem = () => {
     if (!rackTarget) return;
 
-    setCompanyFocusTarget({
-      itemId: rackTarget.id,
-      requestKey: Date.now(),
-    });
+    if (rackTarget.returnTo === "purchases" && rackTarget.invoiceId) {
+      setPurchaseFocusTarget({
+        invoiceId: rackTarget.invoiceId,
+        itemId: rackTarget.id,
+        tranId: rackTarget.tranId ?? 0,
+        requestKey: Date.now(),
+      });
+
+      setRackTarget(null);
+      changeTab("purchases");
+      return;
+    }
+
+    if (rackTarget.returnTo === "companies") {
+      setCompanyFocusTarget({
+        itemId: rackTarget.id,
+        requestKey: Date.now(),
+      });
+
+      setRackTarget(null);
+      changeTab("companies");
+      return;
+    }
 
     setRackTarget(null);
-    changeTab("companies");
   };
 
   return (
@@ -100,7 +153,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       <AppTabs activeTab={activeTab} onChange={changeTab} />
 
       {/*
-        Keep the three pages mounted and hide inactive tabs. This is important:
+        Keep the pages mounted and hide inactive tabs. This is important:
         when an item is opened from Companies -> Update Rack, the selected
         company, item search and item-list state remain intact.
       */}
@@ -109,7 +162,20 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
           onLogout={onLogout}
           showHeader={false}
           rackTarget={rackTarget}
-          onRackOperationComplete={returnToCompanyItem}
+          onRackOperationComplete={returnToSourceItem}
+        />
+      </div>
+
+      <div
+        className={activeTab === "purchases" ? "block" : "hidden"}
+        aria-hidden={activeTab !== "purchases"}
+      >
+        <PurchasesPage
+          onEditRack={openPurchaseItemInRack}
+          focusInvoiceId={purchaseFocusTarget?.invoiceId ?? null}
+          focusItemId={purchaseFocusTarget?.itemId ?? null}
+          focusTranId={purchaseFocusTarget?.tranId ?? null}
+          focusRequestKey={purchaseFocusTarget?.requestKey ?? 0}
         />
       </div>
 

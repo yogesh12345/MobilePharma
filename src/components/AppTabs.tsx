@@ -1,4 +1,4 @@
-type MobileTab = "rack" | "companies" | "customers";
+type MobileTab = "rack" | "purchases" | "companies" | "customers";
 
 interface AppTabsProps {
   activeTab: MobileTab;
@@ -7,6 +7,7 @@ interface AppTabsProps {
 
 const tabs: Array<{ key: MobileTab; label: string }> = [
   { key: "rack", label: "Update Rack" },
+  { key: "purchases", label: "Purchases" },
   { key: "companies", label: "Companies" },
   { key: "customers", label: "Customers" },
 ];
@@ -16,7 +17,7 @@ export type { MobileTab };
 export default function AppTabs({ activeTab, onChange }: AppTabsProps) {
   return (
     <nav className="sticky top-[61px] z-20 border-b border-blue-200 bg-white shadow-sm">
-      <div className="mx-auto grid w-full max-w-3xl grid-cols-3">
+      <div className="mx-auto grid w-full max-w-3xl grid-cols-4">
         {tabs.map((tab) => {
           const active = activeTab === tab.key;
           return (
