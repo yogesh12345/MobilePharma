@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppTabs, { type MobileTab } from "../components/AppTabs";
 import ItemLocationPage from "./ItemLocationPage";
 import CompaniesPage from "./CompaniesPage";
 import CustomersPage from "./CustomersPage";
+import { ACTIVE_TAB_KEY, getStoredValue, setStoredValue } from "../services/storage";
 
 interface MobileTabsPageProps {
   onLogout: () => void;
@@ -19,18 +20,36 @@ type CompanyFocusTarget = {
   requestKey: number;
 };
 
+const isMobileTab = (value: string | null): value is MobileTab =>
+  value === "rack" || value === "companies" || value === "customers";
+
 export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   const [activeTab, setActiveTab] = useState<MobileTab>(
-    () => (localStorage.getItem("mobileActiveTab") as MobileTab) || "rack",
+    () => {
+      const storedTab = localStorage.getItem(ACTIVE_TAB_KEY);
+      return isMobileTab(storedTab) ? storedTab : "rack";
+    },
   );
 
   const [rackTarget, setRackTarget] = useState<RackTarget | null>(null);
   const [companyFocusTarget, setCompanyFocusTarget] =
     useState<CompanyFocusTarget | null>(null);
 
+  useEffect(() => {
+    let disposed = false;
+
+    void getStoredValue(ACTIVE_TAB_KEY).then((storedTab) => {
+      if (!disposed && isMobileTab(storedTab)) setActiveTab(storedTab);
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
   const changeTab = (tab: MobileTab) => {
     setActiveTab(tab);
-    localStorage.setItem("mobileActiveTab", tab);
+    void setStoredValue(ACTIVE_TAB_KEY, tab);
   };
 
   const openItemInRack = (item: { id: number; ItemName: string }) => {
