@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import LoginPage from "./pages/LoginPage";
 import MobileTabsPage from "./pages/MobileTabsPage";
 import NetworkStatusBanner from "./components/NetworkStatusBanner";
+import {
+  clearCachedPermissions,
+  PermissionProvider,
+} from "./context/PermissionContext";
 import API, { setApiToken } from "./services/api";
 import { getStoredToken, removeStoredToken } from "./services/storage";
 
@@ -14,6 +18,7 @@ export default function App() {
     const handleUnauthorized = () => {
       setApiToken(null);
       void removeStoredToken();
+      void clearCachedPermissions();
       setAuthState("guest");
     };
 
@@ -80,6 +85,7 @@ export default function App() {
   const logout = async () => {
     setApiToken(null);
     await removeStoredToken();
+    await clearCachedPermissions();
     setAuthState("guest");
   };
 
@@ -91,7 +97,9 @@ export default function App() {
           Checking session...
         </main>
       ) : authState === "authenticated" ? (
-        <MobileTabsPage onLogout={logout} />
+        <PermissionProvider>
+          <MobileTabsPage onLogout={logout} />
+        </PermissionProvider>
       ) : (
         <LoginPage onLogin={() => setAuthState("authenticated")} />
       )}

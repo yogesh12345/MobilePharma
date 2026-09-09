@@ -38,6 +38,8 @@ type CurrentStock = {
 
 interface CompaniesPageProps {
   onEditRack?: (item: { id: number; ItemName: string }) => void;
+  canUpdateCompany?: boolean;
+  canUpdateRack?: boolean;
   focusItemId?: number | null;
   focusRequestKey?: number;
 }
@@ -79,6 +81,8 @@ const STOCK_BATCH_SIZE = 10;
 
 export default function CompaniesPage({
   onEditRack,
+  canUpdateCompany = true,
+  canUpdateRack = true,
   focusItemId = null,
   focusRequestKey = 0,
 }: CompaniesPageProps) {
@@ -305,7 +309,7 @@ export default function CompaniesPage({
       compShort.trim() !== selected.CompShort.trim());
 
   const saveCompany = async () => {
-    if (!selected || !hasChange) return;
+    if (!selected || !hasChange || !canUpdateCompany) return;
 
     setSaving(true);
     setMessage("");
@@ -405,11 +409,17 @@ export default function CompaniesPage({
               label="Company Name"
               value={compName}
               onChange={(e) => {
+                if (!canUpdateCompany) return;
                 setCompName(e.target.value);
                 setMessage("");
               }}
-              className={inputClass}
-              labelBgClassName="bg-white"
+              disabled={!canUpdateCompany}
+              className={
+                canUpdateCompany
+                  ? inputClass
+                  : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
+              }
+              labelBgClassName={canUpdateCompany ? "bg-white" : "bg-gray-100"}
             />
 
             <FloatingLabelInput
@@ -417,13 +427,25 @@ export default function CompaniesPage({
               label="Short Name"
               value={compShort}
               onChange={(e) => {
+                if (!canUpdateCompany) return;
                 setCompShort(e.target.value);
                 setMessage("");
               }}
-              className={inputClass}
-              labelBgClassName="bg-white"
+              disabled={!canUpdateCompany}
+              className={
+                canUpdateCompany
+                  ? inputClass
+                  : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
+              }
+              labelBgClassName={canUpdateCompany ? "bg-white" : "bg-gray-100"}
             />
           </div>
+
+          {!canUpdateCompany && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+              You have view-only access for company details.
+            </div>
+          )}
 
           <div className="mt-4 flex justify-end gap-2">
             <button
@@ -441,7 +463,7 @@ export default function CompaniesPage({
             <button
               type="button"
               onClick={saveCompany}
-              disabled={!hasChange || saving}
+              disabled={!canUpdateCompany || !hasChange || saving}
               className="rounded-md bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
             >
               {saving ? "Updating..." : "Update"}
@@ -506,19 +528,27 @@ export default function CompaniesPage({
                   }}
                   type="button"
                   onClick={() =>
-                    onEditRack?.({
-                      id: item.id,
-                      ItemName: item.ItemName,
-                    })
+                    canUpdateRack
+                      ? onEditRack?.({
+                          id: item.id,
+                          ItemName: item.ItemName,
+                        })
+                      : undefined
                   }
-                  className={`block w-full border-b border-slate-200 px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-blue-100 active:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
+                  className={`block w-full border-b border-slate-200 px-3 py-3 text-left transition-colors last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
+                    canUpdateRack ? "hover:bg-blue-100 active:bg-blue-200" : "cursor-default"
+                  } ${
                     focusItemId === item.id
                       ? "bg-amber-50 ring-2 ring-inset ring-amber-300"
                       : index % 2 === 0
                         ? "bg-white"
                         : "bg-sky-50/70"
                   }`}
-                  title="Open this item in Update Rack"
+                  title={
+                    canUpdateRack
+                      ? "Open this item in Update Rack"
+                      : "View-only access"
+                  }
                 >
                   <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2">
                     <div className="pt-0.5 text-sm font-semibold text-gray-500">

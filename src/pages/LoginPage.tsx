@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import API, { setApiToken } from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
-import { setStoredToken } from "../services/storage";
+import { removeStoredPermissions, setStoredToken } from "../services/storage";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -49,6 +49,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       });
       const token = response.data?.token;
       if (!token) throw new Error("Login succeeded but no token was returned.");
+      await removeStoredPermissions();
       setApiToken(token);
       await setStoredToken(token);
       onLogin();

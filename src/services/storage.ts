@@ -5,6 +5,7 @@ const canUsePreferences =
 
 export const TOKEN_KEY = "pharmasys_token";
 export const ACTIVE_TAB_KEY = "mobileActiveTab";
+export const PERMISSIONS_KEY = "mobilePermissions";
 
 export async function getStoredValue(key: string) {
   if (canUsePreferences) {
@@ -46,3 +47,7 @@ export async function removeStoredValue(key: string) {
 export const getStoredToken = () => getStoredValue(TOKEN_KEY);
 export const setStoredToken = (token: string) => setStoredValue(TOKEN_KEY, token);
 export const removeStoredToken = () => removeStoredValue(TOKEN_KEY);
+export const getStoredPermissions = () => getStoredValue(PERMISSIONS_KEY);
+export const setStoredPermissions = (permissions: string) =>
+  setStoredValue(PERMISSIONS_KEY, permissions);
+export const removeStoredPermissions = () => removeStoredValue(PERMISSIONS_KEY);

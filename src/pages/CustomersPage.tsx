@@ -33,7 +33,13 @@ const amount = (n: number) =>
 const inputClass =
   "w-full rounded-md border border-blue-400 bg-white px-3 py-2.5 font-semibold text-gray-900 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-200";
 
-export default function CustomersPage() {
+interface CustomersPageProps {
+  canUpdateContact?: boolean;
+}
+
+export default function CustomersPage({
+  canUpdateContact = true,
+}: CustomersPageProps) {
   const [areas, setAreas] = useState<Area[]>([]);
   const [expandedArea, setExpandedArea] = useState<string>("");
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -119,7 +125,7 @@ export default function CustomersPage() {
       email.trim() !== (selected.EmailID ?? "").trim());
 
   const saveCustomer = async () => {
-    if (!selected || !hasChange) return;
+    if (!selected || !hasChange || !canUpdateContact) return;
     setSaving(true);
     setMessage("");
     try {
@@ -170,39 +176,63 @@ export default function CustomersPage() {
               label="Mobile No."
               value={mobile}
               onChange={(e) => {
+                if (!canUpdateContact) return;
                 setMobile(e.target.value);
                 setMessage("");
               }}
+              disabled={!canUpdateContact}
               inputMode="tel"
-              className={inputClass}
-              labelBgClassName="bg-white"
+              className={
+                canUpdateContact
+                  ? inputClass
+                  : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
+              }
+              labelBgClassName={canUpdateContact ? "bg-white" : "bg-gray-100"}
             />
             <FloatingLabelInput
               id="custWhatsapp"
               label="WhatsApp No."
               value={whatsapp}
               onChange={(e) => {
+                if (!canUpdateContact) return;
                 setWhatsapp(e.target.value);
                 setMessage("");
               }}
+              disabled={!canUpdateContact}
               inputMode="tel"
-              className={inputClass}
-              labelBgClassName="bg-white"
+              className={
+                canUpdateContact
+                  ? inputClass
+                  : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
+              }
+              labelBgClassName={canUpdateContact ? "bg-white" : "bg-gray-100"}
             />
             <FloatingLabelInput
               id="custEmail"
               label="Email ID"
               value={email}
               onChange={(e) => {
+                if (!canUpdateContact) return;
                 setEmail(e.target.value);
                 setMessage("");
               }}
+              disabled={!canUpdateContact}
               inputMode="email"
               type="email"
-              className={inputClass}
-              labelBgClassName="bg-white"
+              className={
+                canUpdateContact
+                  ? inputClass
+                  : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
+              }
+              labelBgClassName={canUpdateContact ? "bg-white" : "bg-gray-100"}
             />
           </div>
+
+          {!canUpdateContact && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+              You have view-only access for customer contact details.
+            </div>
+          )}
 
           <div className="mt-4 flex justify-end gap-2">
             <button
@@ -214,7 +244,7 @@ export default function CustomersPage() {
             </button>
             <button
               type="button"
-              disabled={!hasChange || saving}
+              disabled={!canUpdateContact || !hasChange || saving}
               onClick={saveCustomer}
               className="rounded-md bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
             >

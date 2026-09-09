@@ -41,6 +41,7 @@ interface PurchasesPageProps {
     invoiceId: number;
     tranId: number;
   }) => void;
+  canUpdateRack?: boolean;
   focusInvoiceId?: number | null;
   focusItemId?: number | null;
   focusTranId?: number | null;
@@ -157,6 +158,7 @@ const formatQtyPair = (qty1: number, qty2: number) => {
 
 export default function PurchasesPage({
   onEditRack,
+  canUpdateRack = true,
   focusInvoiceId = null,
   focusItemId = null,
   focusTranId = null,
@@ -267,21 +269,29 @@ export default function PurchasesPage({
               }}
               type="button"
               onClick={() =>
-                onEditRack?.({
-                  id: item.ItemID,
-                  ItemName: item.ItemName,
-                  invoiceId: selectedInvoice.id,
-                  tranId: item.TranID,
-                })
+                canUpdateRack
+                  ? onEditRack?.({
+                      id: item.ItemID,
+                      ItemName: item.ItemName,
+                      invoiceId: selectedInvoice.id,
+                      tranId: item.TranID,
+                    })
+                  : undefined
               }
-              className={`block w-full border-b border-slate-200 px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-blue-100 active:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
+              className={`block w-full border-b border-slate-200 px-3 py-3 text-left transition-colors last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
+                canUpdateRack ? "hover:bg-blue-100 active:bg-blue-200" : "cursor-default"
+              } ${
                 focusTranId === item.TranID || (!focusTranId && focusItemId === item.ItemID)
                   ? "bg-amber-50 ring-2 ring-inset ring-amber-300"
                   : index % 2 === 0
                     ? "bg-white"
                     : "bg-sky-50/70"
               }`}
-              title="Open this item in Update Rack"
+              title={
+                canUpdateRack
+                  ? "Open this item in Update Rack"
+                  : "View-only access"
+              }
             >
               <div className="flex items-start justify-between gap-3">
                 <span className="min-w-0 font-semibold text-gray-900">{item.ItemName}</span>

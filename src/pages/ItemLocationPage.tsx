@@ -7,6 +7,7 @@ import type { AutoCompleteItem, ItemDetails } from "../types/item";
 interface ItemLocationPageProps {
   onLogout?: () => void;
   showHeader?: boolean;
+  canUpdateRack?: boolean;
   rackTarget?: {
     id: number;
     itemName: string;
@@ -28,6 +29,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 export default function ItemLocationPage({
   onLogout,
   showHeader = true,
+  canUpdateRack = true,
   rackTarget = null,
   onRackOperationComplete,
 }: ItemLocationPageProps) {
@@ -155,7 +157,7 @@ export default function ItemLocationPage({
   }, [rackTarget?.requestKey]);
 
   const handleUpdate = async () => {
-    if (!selectedItem) return;
+    if (!selectedItem || !canUpdateRack) return;
     try {
       setSaving(true);
       setMessage(null);
@@ -187,6 +189,7 @@ export default function ItemLocationPage({
     "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100";
   const editableClass =
     "w-full rounded-md border border-blue-400 bg-white px-3 py-2.5 font-semibold text-gray-900 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-200";
+  const rackInputClass = canUpdateRack ? editableClass : readOnlyClass;
 
   return (
     <main className="min-h-dvh bg-gray-100 text-gray-800">
@@ -327,13 +330,21 @@ export default function ItemLocationPage({
                   value={rackNumber}
                   maxLength={15}
                   onChange={(e) => {
+                    if (!canUpdateRack) return;
                     setRackNumber(e.target.value);
                     setMessage(null);
                   }}
-                  className={editableClass}
-                  labelBgClassName="bg-white"
+                  disabled={!canUpdateRack}
+                  className={rackInputClass}
+                  labelBgClassName={canUpdateRack ? "bg-white" : "bg-gray-100"}
                 />
               </div>
+
+              {!canUpdateRack && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                  You have view-only access for rack/location details.
+                </div>
+              )}
 
               {message && (
                 <div
@@ -360,7 +371,7 @@ export default function ItemLocationPage({
                 <button
                   type="button"
                   onClick={handleUpdate}
-                  disabled={saving || !hasChange}
+                  disabled={!canUpdateRack || saving || !hasChange}
                   className="min-h-11 rounded-md bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? "Updating..." : "Update"}
