@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppTabs, { MOBILE_TABS, type MobileTab } from "../components/AppTabs";
 import { usePermissions } from "../context/PermissionContext";
 import ItemLocationPage from "./ItemLocationPage";
@@ -59,15 +59,24 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
     useState<PurchaseFocusTarget | null>(null);
 
   const canUpdateRack = canAccess("mobile.rack", "update");
+  const canOpenRack = canAccess("mobile.rack", "view") || canUpdateRack;
+  const canEditPurchase = canAccess("mobile.purchase", "edit");
+  const canOpenRackFromPurchase = canUpdateRack || canEditPurchase;
   const canUpdateCompany = canAccess("mobile.company", "update");
   const canUpdateCustomerContact = canAccess(
     "mobile.customer",
     "update_contact",
   );
-  const allowedTabs = MOBILE_TABS.filter((tab) => {
-    const permission = TAB_PERMISSIONS[tab.key];
-    return canAccess(permission.resource, permission.action);
-  });
+  const allowedTabs = useMemo(
+    () =>
+      MOBILE_TABS.filter((tab) => {
+        if (tab.key === "rack") return canOpenRack;
+
+        const permission = TAB_PERMISSIONS[tab.key];
+        return canAccess(permission.resource, permission.action);
+      }),
+    [canAccess, canOpenRack],
+  );
   const hasTabAccess = (tab: MobileTab) =>
     allowedTabs.some((allowed) => allowed.key === tab);
 
@@ -87,11 +96,12 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
     if (permissionsLoading) return;
     const firstAllowed = allowedTabs[0]?.key;
     if (!firstAllowed) return;
+    if (activeTab === "rack" && rackTarget) return;
     if (!hasTabAccess(activeTab)) {
       setActiveTab(firstAllowed);
       void setStoredValue(ACTIVE_TAB_KEY, firstAllowed);
     }
-  }, [activeTab, allowedTabs, permissionsLoading]);
+  }, [activeTab, allowedTabs, permissionsLoading, rackTarget]);
 
   const changeTab = (tab: MobileTab) => {
     if (!hasTabAccess(tab)) return;
@@ -118,7 +128,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
     invoiceId: number;
     tranId: number;
   }) => {
-    if (!canUpdateRack) return;
+    if (!canOpenRackFromPurchase) return;
 
     setRackTarget({
       id: item.id,
@@ -129,7 +139,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       returnTo: "purchases",
     });
 
-    changeTab("rack");
+    setActiveTab("rack");
   };
 
   const returnToSourceItem = () => {
@@ -192,7 +202,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
         <>
           <AppTabs activeTab={activeTab} tabs={allowedTabs} onChange={changeTab} />
 
-          {hasTabAccess("rack") && (
+          {(hasTabAccess("rack") || rackTarget) && (
             <div
               className={activeTab === "rack" ? "block" : "hidden"}
               aria-hidden={activeTab !== "rack"}
@@ -201,7 +211,10 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
                 onLogout={onLogout}
                 showHeader={false}
                 rackTarget={rackTarget}
-                canUpdateRack={canUpdateRack}
+                canUpdateRack={
+                  canUpdateRack ||
+                  (rackTarget?.returnTo === "purchases" && canEditPurchase)
+                }
                 onRackOperationComplete={returnToSourceItem}
               />
             </div>
@@ -214,7 +227,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
             >
               <PurchasesPage
                 onEditRack={openPurchaseItemInRack}
-                canUpdateRack={canUpdateRack}
+                canUpdateRack={canOpenRackFromPurchase}
                 focusInvoiceId={purchaseFocusTarget?.invoiceId ?? null}
                 focusItemId={purchaseFocusTarget?.itemId ?? null}
                 focusTranId={purchaseFocusTarget?.tranId ?? null}
