@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import AppTabs, { MOBILE_TABS, type MobileTab } from "../components/AppTabs";
+import { useMemo, useState } from "react";
+import AppLauncher from "../components/AppLauncher";
+import {
+  MOBILE_MODULES,
+  type MobileModule,
+} from "../components/mobileModules";
 import { usePermissions } from "../context/PermissionContext";
 import ItemLocationPage from "./ItemLocationPage";
 import PurchasesPage from "./PurchasesPage";
 import CompaniesPage from "./CompaniesPage";
 import CustomersPage from "./CustomersPage";
-import { ACTIVE_TAB_KEY, getStoredValue, setStoredValue } from "../services/storage";
 
 interface MobileTabsPageProps {
   onLogout: () => void;
@@ -32,25 +35,57 @@ type PurchaseFocusTarget = {
   requestKey: number;
 };
 
-const TAB_PERMISSIONS: Record<MobileTab, { resource: string; action: string }> = {
+const MODULE_PERMISSIONS: Record<
+  MobileModule,
+  { resource: string; action: string }
+> = {
   rack: { resource: "mobile.rack", action: "view" },
   purchases: { resource: "mobile.purchase", action: "view" },
   companies: { resource: "mobile.company", action: "view" },
   customers: { resource: "mobile.customer", action: "view" },
 };
 
-const isMobileTab = (value: string | null): value is MobileTab =>
-  value === "rack" ||
-  value === "purchases" ||
-  value === "companies" ||
-  value === "customers";
+function HomeIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m4 11 8-7 8 7" />
+      <path d="M6.5 10.5V20h11v-9.5" />
+      <path d="M10 20v-5h4v5" />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M10 6H6.5A1.5 1.5 0 0 0 5 7.5v9A1.5 1.5 0 0 0 6.5 18H10" />
+      <path d="M14 8l4 4-4 4" />
+      <path d="M18 12H9" />
+    </svg>
+  );
+}
 
 export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   const { canAccess, loading: permissionsLoading } = usePermissions();
-  const [activeTab, setActiveTab] = useState<MobileTab>(() => {
-    const storedTab = localStorage.getItem(ACTIVE_TAB_KEY);
-    return isMobileTab(storedTab) ? storedTab : "rack";
-  });
+  const [activeModule, setActiveModule] = useState<MobileModule | null>(null);
 
   const [rackTarget, setRackTarget] = useState<RackTarget | null>(null);
   const [companyFocusTarget, setCompanyFocusTarget] =
@@ -67,46 +102,28 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
     "mobile.customer",
     "update_contact",
   );
-  const allowedTabs = useMemo(
+  const allowedModules = useMemo(
     () =>
-      MOBILE_TABS.filter((tab) => {
-        if (tab.key === "rack") return canOpenRack;
+      MOBILE_MODULES.filter((module) => {
+        if (!module.visible) return false;
+        if (module.key === "rack") return canOpenRack;
 
-        const permission = TAB_PERMISSIONS[tab.key];
+        const permission = MODULE_PERMISSIONS[module.key];
         return canAccess(permission.resource, permission.action);
       }),
     [canAccess, canOpenRack],
   );
-  const hasTabAccess = (tab: MobileTab) =>
-    allowedTabs.some((allowed) => allowed.key === tab);
+  const hasModuleAccess = (module: MobileModule) =>
+    allowedModules.some((allowed) => allowed.key === module && allowed.enabled);
+  const selectedModule =
+    activeModule &&
+    (hasModuleAccess(activeModule) || (activeModule === "rack" && rackTarget))
+      ? activeModule
+      : null;
 
-  useEffect(() => {
-    let disposed = false;
-
-    void getStoredValue(ACTIVE_TAB_KEY).then((storedTab) => {
-      if (!disposed && isMobileTab(storedTab)) setActiveTab(storedTab);
-    });
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (permissionsLoading) return;
-    const firstAllowed = allowedTabs[0]?.key;
-    if (!firstAllowed) return;
-    if (activeTab === "rack" && rackTarget) return;
-    if (!hasTabAccess(activeTab)) {
-      setActiveTab(firstAllowed);
-      void setStoredValue(ACTIVE_TAB_KEY, firstAllowed);
-    }
-  }, [activeTab, allowedTabs, permissionsLoading, rackTarget]);
-
-  const changeTab = (tab: MobileTab) => {
-    if (!hasTabAccess(tab)) return;
-    setActiveTab(tab);
-    void setStoredValue(ACTIVE_TAB_KEY, tab);
+  const openModule = (module: MobileModule) => {
+    if (!hasModuleAccess(module)) return;
+    setActiveModule(module);
   };
 
   const openItemInRack = (item: { id: number; ItemName: string }) => {
@@ -119,7 +136,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       returnTo: "companies",
     });
 
-    changeTab("rack");
+    openModule("rack");
   };
 
   const openPurchaseItemInRack = (item: {
@@ -139,7 +156,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       returnTo: "purchases",
     });
 
-    setActiveTab("rack");
+    setActiveModule("rack");
   };
 
   const returnToSourceItem = () => {
@@ -154,7 +171,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       });
 
       setRackTarget(null);
-      changeTab("purchases");
+      openModule("purchases");
       return;
     }
 
@@ -165,7 +182,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       });
 
       setRackTarget(null);
-      changeTab("companies");
+      openModule("companies");
       return;
     }
 
@@ -173,20 +190,21 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   };
 
   return (
-    <main className="min-h-dvh bg-gray-100 text-gray-800">
+    <main className="min-h-dvh bg-gray-100 pb-20 text-gray-800">
       <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex min-h-[61px] w-full max-w-3xl items-center justify-between gap-3 px-3 py-2 sm:px-4">
           <div>
             <h1 className="text-lg font-bold text-blue-900">PharmaSys</h1>
           </div>
 
-          <button
-            type="button"
-            onClick={onLogout}
-            className="rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-800 shadow-sm"
-          >
-            Logout
-          </button>
+          {selectedModule && (
+            <div className="truncate text-sm font-bold text-blue-900">
+              {
+                MOBILE_MODULES.find((module) => module.key === selectedModule)
+                  ?.label
+              }
+            </div>
+          )}
         </div>
       </header>
 
@@ -194,18 +212,18 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
         <div className="mx-auto w-full max-w-3xl px-3 py-4 text-sm font-semibold text-gray-600">
           Loading permissions...
         </div>
-      ) : allowedTabs.length === 0 ? (
+      ) : allowedModules.length === 0 ? (
         <div className="mx-auto w-full max-w-3xl px-3 py-10 text-center text-sm font-semibold text-red-700">
           You do not have permission to use MobilePharma.
         </div>
+      ) : !selectedModule ? (
+        <AppLauncher modules={allowedModules} onOpen={openModule} />
       ) : (
         <>
-          <AppTabs activeTab={activeTab} tabs={allowedTabs} onChange={changeTab} />
-
-          {(hasTabAccess("rack") || rackTarget) && (
+          {(hasModuleAccess("rack") || rackTarget) && (
             <div
-              className={activeTab === "rack" ? "block" : "hidden"}
-              aria-hidden={activeTab !== "rack"}
+              className={selectedModule === "rack" ? "block" : "hidden"}
+              aria-hidden={selectedModule !== "rack"}
             >
               <ItemLocationPage
                 onLogout={onLogout}
@@ -220,10 +238,10 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
             </div>
           )}
 
-          {hasTabAccess("purchases") && (
+          {hasModuleAccess("purchases") && (
             <div
-              className={activeTab === "purchases" ? "block" : "hidden"}
-              aria-hidden={activeTab !== "purchases"}
+              className={selectedModule === "purchases" ? "block" : "hidden"}
+              aria-hidden={selectedModule !== "purchases"}
             >
               <PurchasesPage
                 onEditRack={openPurchaseItemInRack}
@@ -236,10 +254,10 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
             </div>
           )}
 
-          {hasTabAccess("companies") && (
+          {hasModuleAccess("companies") && (
             <div
-              className={activeTab === "companies" ? "block" : "hidden"}
-              aria-hidden={activeTab !== "companies"}
+              className={selectedModule === "companies" ? "block" : "hidden"}
+              aria-hidden={selectedModule !== "companies"}
             >
               <CompaniesPage
                 onEditRack={openItemInRack}
@@ -251,15 +269,44 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
             </div>
           )}
 
-          {hasTabAccess("customers") && (
+          {hasModuleAccess("customers") && (
             <div
-              className={activeTab === "customers" ? "block" : "hidden"}
-              aria-hidden={activeTab !== "customers"}
+              className={selectedModule === "customers" ? "block" : "hidden"}
+              aria-hidden={selectedModule !== "customers"}
             >
               <CustomersPage canUpdateContact={canUpdateCustomerContact} />
             </div>
           )}
         </>
+      )}
+
+      {!permissionsLoading && allowedModules.length > 0 && (
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-200 bg-white/95 shadow-[0_-4px_14px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="mx-auto grid min-h-16 w-full max-w-3xl grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setActiveModule(null)}
+              className={`flex flex-col items-center justify-center gap-1 text-xs font-semibold transition ${
+                selectedModule
+                  ? "text-slate-700 hover:bg-slate-50"
+                  : "bg-blue-50 text-blue-800"
+              }`}
+              aria-current={!selectedModule ? "page" : undefined}
+            >
+              <HomeIcon />
+              <span>Home</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex flex-col items-center justify-center gap-1 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+            >
+              <LogoutIcon />
+              <span>Logout</span>
+            </button>
+          </div>
+        </nav>
       )}
     </main>
   );

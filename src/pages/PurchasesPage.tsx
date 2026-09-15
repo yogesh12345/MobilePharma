@@ -134,11 +134,11 @@ const formatDate = (value?: string | null) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  const day = pad2(date.getDate());
+  const month = pad2(date.getMonth() + 1);
+  const year = pad2(date.getFullYear() % 100);
+
+  return `${day}/${month}/${year}`;
 };
 
 const qty = (value: number) => {
@@ -219,8 +219,11 @@ export default function PurchasesPage({
     };
   }, []);
 
-  const openInvoice = async (invoice: PurchaseInvoice) => {
-    if (selectedInvoice?.id === invoice.id) {
+  const openInvoice = async (
+    invoice: PurchaseInvoice,
+    options: { forceOpen?: boolean } = {},
+  ) => {
+    if (selectedInvoice?.id === invoice.id && !options.forceOpen) {
       itemRequestKeyRef.current += 1;
       setSelectedInvoice(null);
       setItems([]);
@@ -251,50 +254,53 @@ export default function PurchasesPage({
     if (selectedInvoice?.id !== invoice.id) return null;
 
     return (
-      <section className="border-t border-blue-200 bg-white">
-        <div className="border-b bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">
-          {selectedInvoice.InvoiceNo} - {selectedInvoice.SupplierName}
-        </div>
-
+      <section className="border-2 border-blue-500 bg-white shadow-inner">
         {loadingItems ? (
           <div className="p-4 text-sm">Loading invoice items...</div>
         ) : items.length === 0 ? (
           <div className="p-4 text-sm text-gray-500">No items found for this invoice.</div>
         ) : (
           items.map((item, index) => (
-            <button
+            <div
               key={item.TranID}
-              ref={(element) => {
-                itemRefs.current[item.TranID] = element;
-              }}
-              type="button"
-              onClick={() =>
-                canUpdateRack
-                  ? onEditRack?.({
-                      id: item.ItemID,
-                      ItemName: item.ItemName,
-                      invoiceId: selectedInvoice.id,
-                      tranId: item.TranID,
-                    })
-                  : undefined
-              }
-              className={`block w-full border-b border-slate-200 px-3 py-3 text-left transition-colors last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
-                canUpdateRack ? "hover:bg-blue-100 active:bg-blue-200" : "cursor-default"
-              } ${
+              className={`block w-full border-b border-blue-200 px-3 py-3 text-left transition-colors last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
                 focusTranId === item.TranID || (!focusTranId && focusItemId === item.ItemID)
                   ? "bg-amber-50 ring-2 ring-inset ring-amber-300"
                   : index % 2 === 0
-                    ? "bg-white"
-                    : "bg-sky-50/70"
+                    ? "bg-emerald-50"
+                    : "bg-indigo-50"
               }`}
-              title={
-                canUpdateRack
-                  ? "Open this item in Update Rack"
-                  : "View-only access"
-              }
             >
               <div className="flex items-start justify-between gap-3">
-                <span className="min-w-0 font-semibold text-gray-900">{item.ItemName}</span>
+                <button
+                  ref={(element) => {
+                    itemRefs.current[item.TranID] = element;
+                  }}
+                  type="button"
+                  onClick={() =>
+                    canUpdateRack
+                      ? onEditRack?.({
+                          id: item.ItemID,
+                          ItemName: item.ItemName,
+                          invoiceId: selectedInvoice.id,
+                          tranId: item.TranID,
+                        })
+                      : undefined
+                  }
+                  disabled={!canUpdateRack}
+                  className={`min-w-0 text-left font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    canUpdateRack
+                      ? "rounded underline-offset-2 hover:text-blue-800 hover:underline"
+                      : "cursor-default"
+                  }`}
+                  title={
+                    canUpdateRack
+                      ? "Open this item in Update Rack"
+                      : "View-only access"
+                  }
+                >
+                  {index + 1}. {item.ItemName}
+                </button>
                 <span className="shrink-0 whitespace-nowrap text-sm font-medium text-gray-700">
                   {item.Packing}
                 </span>
@@ -305,7 +311,7 @@ export default function PurchasesPage({
                 <span>MRP: {money(item.MRP)}</span>
                 <span className="text-right">Qty: {formatQtyPair(item.Qty1, item.Qty2)}</span>
               </div>
-            </button>
+            </div>
           ))
         )}
       </section>
@@ -319,7 +325,7 @@ export default function PurchasesPage({
     if (!invoice) return;
 
     setOpenMonth(invoice.MonthKey);
-    void openInvoice(invoice);
+    void openInvoice(invoice, { forceOpen: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusInvoiceId, focusRequestKey, invoiceById]);
 
@@ -405,10 +411,12 @@ export default function PurchasesPage({
                                   : "bg-sky-50/70"
                             }`}
                           >
-                            <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-sm sm:grid-cols-[7.5rem_minmax(0,1fr)_10rem_6rem]">
-                              <span>{formatDate(invoice.InvoiceDate)}</span>
-                              <span className="font-semibold text-gray-900">{invoice.InvoiceNo}</span>
-                              <span className="text-right">Received: {formatDate(invoice.ReceivedOn)}</span>
+                            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+                              <span>Inv. Date:{formatDate(invoice.InvoiceDate)}</span>
+                              <span className="text-right font-semibold text-gray-900">
+                                Inv. No.:{invoice.InvoiceNo}
+                              </span>
+                              <span>Received: {formatDate(invoice.ReceivedOn)}</span>
                               <span className="text-right">Gr.No.: {invoice.GrNo || "-"}</span>
                             </div>
                             <div className="mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-3 text-xs font-medium text-gray-600">
