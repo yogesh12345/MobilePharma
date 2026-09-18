@@ -13,6 +13,7 @@ type Customer = {
   MobileNo: string;
   WhatsappNo: string;
   EmailID: string;
+  GSTNo: string;
   CashSales: number;
   CreditSales: number;
 };
@@ -35,10 +36,18 @@ const inputClass =
 
 interface CustomersPageProps {
   canUpdateContact?: boolean;
+  focusCustomerId?: number | null;
+  focusRequestKey?: number;
+  onCustomerUpdated?: (customer: Customer) => void;
+  onBackToSalesOrder?: (customer?: Customer) => void;
 }
 
 export default function CustomersPage({
   canUpdateContact = true,
+  focusCustomerId: externalFocusCustomerId = null,
+  focusRequestKey: externalFocusRequestKey = 0,
+  onCustomerUpdated,
+  onBackToSalesOrder,
 }: CustomersPageProps) {
   const [areas, setAreas] = useState<Area[]>([]);
   const [expandedArea, setExpandedArea] = useState<string>("");
@@ -46,6 +55,7 @@ export default function CustomersPage({
   const [mobile, setMobile] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
+  const [gstNo, setGstNo] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -53,6 +63,7 @@ export default function CustomersPage({
   const [focusRequestKey, setFocusRequestKey] = useState(0);
   const customerButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const mobileInputRef = useRef<HTMLInputElement | null>(null);
+  const handledExternalFocusKey = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -102,11 +113,20 @@ export default function CustomersPage({
     return () => window.clearTimeout(timer);
   }, [focusCustomerId, focusRequestKey, selected]);
 
-  const returnToCustomerList = (customerId: number) => {
+  const returnToSourceView = (customer?: Customer) => {
+    const customerId = customer?.id ?? selected?.id;
     setSelected(null);
     setMessage("");
-    setFocusCustomerId(customerId);
-    setFocusRequestKey((current) => current + 1);
+
+    if (onBackToSalesOrder) {
+      onBackToSalesOrder(customer);
+      return;
+    }
+
+    if (customerId) {
+      setFocusCustomerId(customerId);
+      setFocusRequestKey((current) => current + 1);
+    }
   };
 
   const openCustomer = (c: Customer) => {
@@ -115,14 +135,31 @@ export default function CustomersPage({
     setMobile(c.MobileNo ?? "");
     setWhatsapp(c.WhatsappNo ?? "");
     setEmail(c.EmailID ?? "");
+    setGstNo(c.GSTNo ?? "");
     setMessage("");
   };
+
+  useEffect(() => {
+    if (
+      !externalFocusCustomerId ||
+      externalFocusRequestKey <= 0 ||
+      externalFocusRequestKey === handledExternalFocusKey.current ||
+      selected?.id === externalFocusCustomerId
+    ) return;
+    const customer = areas.flatMap((area) => area.customers).find((item) => item.id === externalFocusCustomerId);
+    if (customer) {
+      handledExternalFocusKey.current = externalFocusRequestKey;
+      setExpandedArea(`${customer.AreaCode}|${customer.AreaName}`);
+      openCustomer(customer);
+    }
+  }, [areas, externalFocusCustomerId, externalFocusRequestKey, selected]);
 
   const hasChange =
     !!selected &&
     (mobile.trim() !== (selected.MobileNo ?? "").trim() ||
       whatsapp.trim() !== (selected.WhatsappNo ?? "").trim() ||
-      email.trim() !== (selected.EmailID ?? "").trim());
+      email.trim() !== (selected.EmailID ?? "").trim() ||
+      gstNo.trim() !== (selected.GSTNo ?? "").trim());
 
   const saveCustomer = async () => {
     if (!selected || !hasChange || !canUpdateContact) return;
@@ -133,6 +170,7 @@ export default function CustomersPage({
         MobileNo: mobile.trim(),
         WhatsappNo: whatsapp.trim(),
         EmailID: email.trim(),
+        GSTNo: gstNo.trim(),
       });
 
       const updated = {
@@ -140,6 +178,7 @@ export default function CustomersPage({
         MobileNo: mobile.trim(),
         WhatsappNo: whatsapp.trim(),
         EmailID: email.trim(),
+        GSTNo: gstNo.trim(),
       };
       setAreas((current) =>
         current.map((a) => ({
@@ -147,7 +186,8 @@ export default function CustomersPage({
           customers: a.customers.map((c) => (c.id === updated.id ? updated : c)),
         })),
       );
-      returnToCustomerList(updated.id);
+      onCustomerUpdated?.(updated);
+      returnToSourceView(updated);
     } catch (e: any) {
       setMessage(e?.response?.data?.error || "Unable to update customer contact.");
     } finally {
@@ -160,7 +200,7 @@ export default function CustomersPage({
       <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
         <button
           type="button"
-          onClick={() => returnToCustomerList(selected.id)}
+          onClick={() => returnToSourceView()}
           className="mb-3 text-sm font-semibold text-blue-700"
         >
           ← Customers
@@ -187,6 +227,19 @@ export default function CustomersPage({
                   ? inputClass
                   : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
               }
+              labelBgClassName={canUpdateContact ? "bg-white" : "bg-gray-100"}
+            />
+            <FloatingLabelInput
+              id="custGstNo"
+              label="GST No."
+              value={gstNo}
+              onChange={(e) => {
+                if (!canUpdateContact) return;
+                setGstNo(e.target.value.toUpperCase());
+                setMessage("");
+              }}
+              disabled={!canUpdateContact}
+              className={canUpdateContact ? inputClass : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"}
               labelBgClassName={canUpdateContact ? "bg-white" : "bg-gray-100"}
             />
             <FloatingLabelInput
@@ -237,7 +290,7 @@ export default function CustomersPage({
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => returnToCustomerList(selected.id)}
+              onClick={() => returnToSourceView()}
               className="rounded-md border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700"
             >
               Cancel

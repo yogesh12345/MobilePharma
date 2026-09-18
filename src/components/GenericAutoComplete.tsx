@@ -51,6 +51,10 @@ interface GenericAutoCompleteProps {
   showLabel5?: boolean;
   /** Hide the floating label block completely when the table/header already provides context */
   hideFloatingLabel?: boolean;
+  /** Removes the input border/focus ring when the parent grid already supplies the cell outline. */
+  disableOutline?: boolean;
+  /** Makes the input background transparent for table/grid embedding. */
+  transparentBackground?: boolean;
   /** Enables typo-tolerant local ranking and a broader fallback fetch */
   enableFuzzyMatching?: boolean;
   /** First-word prefix length used for fallback fetches when typo matching is enabled */
@@ -347,6 +351,8 @@ const GenericAutoComplete = React.forwardRef<
       secondaryLabels = ["label2", "label3", "label4"],
       showLabel5 = true,
       hideFloatingLabel = false,
+      disableOutline = false,
+      transparentBackground = false,
       enableFuzzyMatching,
       fuzzyFallbackPrefixLength = 4,
     },
@@ -683,6 +689,14 @@ const GenericAutoComplete = React.forwardRef<
       }
     };
 
+    const renderModeAsPlaceholder = disableOutline || transparentBackground;
+    const modeLabelText = `${topLabel} [ ${
+      mode === "live" ? "Live" : "Enter key"
+    } ]`;
+    const hasTopLabel =
+      topLabel.trim().length > 0 &&
+      !hideFloatingLabel &&
+      !renderModeAsPlaceholder;
     const inputHasValue = searchQuery.trim().length > 0;
     const showTopLabel =
       alwaysShowTopLabel || (hideTopLabelWhenFilled ? !inputHasValue : true);
@@ -748,7 +762,14 @@ const GenericAutoComplete = React.forwardRef<
 
     return (
       <div className="relative w-full">
-        <div className="floating-label-group">
+        <div
+          className="floating-label-group"
+          data-empty-label={hasTopLabel ? undefined : "true"}
+          data-disable-outline={disableOutline ? "true" : undefined}
+          data-transparent-background={
+            transparentBackground ? "true" : undefined
+          }
+        >
           <input
             ref={inputRef}
             type="text"
@@ -797,14 +818,18 @@ const GenericAutoComplete = React.forwardRef<
               handleKeyDown(e);
               // ...existing onKeyDown body...
             }}
-            placeholder={myplacehoder ?? "Search..."}
+            placeholder={
+              renderModeAsPlaceholder && topLabel.trim().length > 0
+                ? modeLabelText
+                : myplacehoder ?? "Search..."
+            }
             // className={className ?? "p-2 border border-gray-300 rounded w-full"}
             className={`${baseInputClass} ${inputClassName ?? ""} ${
               disabled ? "bg-gray-200 cursor-not-allowed opacity-70" : ""
             }`}
             style={inputStyle}
           />
-          {!hideFloatingLabel ? (
+          {hasTopLabel ? (
             <label className="floating-label" style={{ zIndex: computedPortalZ }}>
               {showTopLabel && (
                 <>

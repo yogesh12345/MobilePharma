@@ -1,14 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppLauncher from "../components/AppLauncher";
 import {
   MOBILE_MODULES,
   type MobileModule,
 } from "../components/mobileModules";
 import { usePermissions } from "../context/PermissionContext";
+import API from "../services/api";
 import ItemLocationPage from "./ItemLocationPage";
 import PurchasesPage from "./PurchasesPage";
 import CompaniesPage from "./CompaniesPage";
 import CustomersPage from "./CustomersPage";
+import SalesOrderPage, { type CustomerUpdate } from "./SalesOrderPage";
 
 interface MobileTabsPageProps {
   onLogout: () => void;
@@ -43,6 +45,7 @@ const MODULE_PERMISSIONS: Record<
   purchases: { resource: "mobile.purchase", action: "view" },
   companies: { resource: "mobile.company", action: "view" },
   customers: { resource: "mobile.customer", action: "view" },
+  salesOrders: { resource: "mobile.salesOrder", action: "view" },
 };
 
 function HomeIcon() {
@@ -86,12 +89,17 @@ function LogoutIcon() {
 export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   const { canAccess, loading: permissionsLoading } = usePermissions();
   const [activeModule, setActiveModule] = useState<MobileModule | null>(null);
+  const [salesOrderRoleAccess, setSalesOrderRoleAccess] = useState(false);
 
   const [rackTarget, setRackTarget] = useState<RackTarget | null>(null);
   const [companyFocusTarget, setCompanyFocusTarget] =
     useState<CompanyFocusTarget | null>(null);
   const [purchaseFocusTarget, setPurchaseFocusTarget] =
     useState<PurchaseFocusTarget | null>(null);
+  const [customerFocusTarget, setCustomerFocusTarget] =
+    useState<{ id: number; requestKey: number } | null>(null);
+  const [customerUpdate, setCustomerUpdate] = useState<CustomerUpdate | null>(null);
+  const [customerReturnFocusKey, setCustomerReturnFocusKey] = useState(0);
 
   const canUpdateRack = canAccess("mobile.rack", "update");
   const canOpenRack = canAccess("mobile.rack", "view") || canUpdateRack;
@@ -102,16 +110,38 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
     "mobile.customer",
     "update_contact",
   );
+
+  useEffect(() => {
+    let disposed = false;
+    void API.get("/mobile/sales-orders/access")
+      .then((res) => {
+        if (!disposed) setSalesOrderRoleAccess(Boolean(res.data?.canAccess));
+      })
+      .catch(() => {
+        if (!disposed) setSalesOrderRoleAccess(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
   const allowedModules = useMemo(
     () =>
       MOBILE_MODULES.filter((module) => {
         if (!module.visible) return false;
         if (module.key === "rack") return canOpenRack;
+        if (module.key === "salesOrders") {
+          return (
+            salesOrderRoleAccess ||
+            canAccess("mobile.salesOrder", "view") ||
+            canAccess("salesOrder", "view")
+          );
+        }
 
         const permission = MODULE_PERMISSIONS[module.key];
         return canAccess(permission.resource, permission.action);
       }),
-    [canAccess, canOpenRack],
+    [canAccess, canOpenRack, salesOrderRoleAccess],
   );
   const hasModuleAccess = (module: MobileModule) =>
     allowedModules.some((allowed) => allowed.key === module && allowed.enabled);
@@ -124,6 +154,17 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   const openModule = (module: MobileModule) => {
     if (!hasModuleAccess(module)) return;
     setActiveModule(module);
+  };
+
+  const openCustomerEditor = (customer: { id: number }) => {
+    setCustomerFocusTarget({ id: customer.id, requestKey: Date.now() });
+    openModule("customers");
+  };
+
+  const returnToSalesOrder = (customer?: CustomerUpdate) => {
+    if (customer) setCustomerUpdate(customer);
+    setCustomerReturnFocusKey((current) => current + 1);
+    setActiveModule("salesOrders");
   };
 
   const openItemInRack = (item: { id: number; ItemName: string }) => {
@@ -274,7 +315,25 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
               className={selectedModule === "customers" ? "block" : "hidden"}
               aria-hidden={selectedModule !== "customers"}
             >
-              <CustomersPage canUpdateContact={canUpdateCustomerContact} />
+              <CustomersPage
+              canUpdateContact={canUpdateCustomerContact}
+              focusCustomerId={customerFocusTarget?.id ?? null}
+              focusRequestKey={customerFocusTarget?.requestKey ?? 0}
+              onBackToSalesOrder={returnToSalesOrder}
+            />
+            </div>
+          )}
+
+          {hasModuleAccess("salesOrders") && (
+            <div
+              className={selectedModule === "salesOrders" ? "block" : "hidden"}
+              aria-hidden={selectedModule !== "salesOrders"}
+            >
+              <SalesOrderPage
+                onEditCustomer={openCustomerEditor}
+                customerUpdate={customerUpdate}
+                customerUpdateFocusRequestKey={customerReturnFocusKey}
+              />
             </div>
           )}
         </>

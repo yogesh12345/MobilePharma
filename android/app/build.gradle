@@ -1,5 +1,30 @@
 apply plugin: 'com.android.application'
 
+// Keep a direct `gradlew assembleRelease` build in sync with the web app.
+// Capacitor otherwise packages the last bundle copied into src/main/assets.
+def webProjectDir = rootProject.file('..')
+def npmCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
+
+tasks.register('buildWebApp', Exec) {
+    workingDir webProjectDir
+    commandLine npmCommand, 'run', 'build'
+    inputs.dir(new File(webProjectDir, 'src'))
+    inputs.dir(new File(webProjectDir, 'public'))
+    inputs.file(new File(webProjectDir, 'package.json'))
+    inputs.file(new File(webProjectDir, 'package-lock.json'))
+    outputs.dir(new File(webProjectDir, 'dist'))
+}
+
+tasks.register('syncWebAssets', Sync) {
+    dependsOn 'buildWebApp'
+    from new File(webProjectDir, 'dist')
+    into new File(projectDir, 'src/main/assets/public')
+}
+
+tasks.named('preBuild') {
+    dependsOn 'syncWebAssets'
+}
+
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 
@@ -16,8 +41,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
 
-        versionCode 5
-        versionName "1.2.2"
+        versionCode 7
+        versionName "1.3.3"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 

@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-type MobileModule = "rack" | "purchases" | "companies" | "customers";
+type MobileModule =
+  | "rack"
+  | "purchases"
+  | "companies"
+  | "customers"
+  | "salesOrders";
 
 type ModuleIcon = {
   bgClass: string;
@@ -69,6 +74,20 @@ const moduleIcons: Record<MobileModule, ModuleIcon> = {
       </>
     ),
   },
+  salesOrders: {
+    bgClass: "bg-violet-100",
+    fgClass: "text-violet-700",
+    icon: (
+      <>
+        <path d="M7 6h12l-1.5 8.5H8.5L7 6Z" />
+        <path d="M7 6 6 3.5H3.5" />
+        <path d="M9 10h7" />
+        <path d="M9.5 13h4" />
+        <circle cx="10" cy="19" r="1.25" />
+        <circle cx="17" cy="19" r="1.25" />
+      </>
+    ),
+  },
 };
 
 export const MOBILE_MODULES: LauncherModule[] = [
@@ -103,6 +122,14 @@ export const MOBILE_MODULES: LauncherModule[] = [
     enabled: true,
     positionClass: "justify-self-end",
     icon: moduleIcons.customers,
+  },
+  {
+    key: "salesOrders",
+    label: "Sales Order",
+    visible: true,
+    enabled: true,
+    positionClass: "justify-self-start",
+    icon: moduleIcons.salesOrders,
   },
 ];
 
