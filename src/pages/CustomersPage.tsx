@@ -13,7 +13,7 @@ type Customer = {
   MobileNo: string;
   WhatsappNo: string;
   EmailID: string;
-  GSTNo: string;
+  GstNo: string;
   CashSales: number;
   CreditSales: number;
 };
@@ -135,7 +135,7 @@ export default function CustomersPage({
     setMobile(c.MobileNo ?? "");
     setWhatsapp(c.WhatsappNo ?? "");
     setEmail(c.EmailID ?? "");
-    setGstNo(c.GSTNo ?? "");
+    setGstNo(c.GstNo ?? "");
     setMessage("");
   };
 
@@ -159,7 +159,7 @@ export default function CustomersPage({
     (mobile.trim() !== (selected.MobileNo ?? "").trim() ||
       whatsapp.trim() !== (selected.WhatsappNo ?? "").trim() ||
       email.trim() !== (selected.EmailID ?? "").trim() ||
-      gstNo.trim() !== (selected.GSTNo ?? "").trim());
+      gstNo.trim() !== (selected.GstNo ?? "").trim());
 
   const saveCustomer = async () => {
     if (!selected || !hasChange || !canUpdateContact) return;
@@ -170,7 +170,7 @@ export default function CustomersPage({
         MobileNo: mobile.trim(),
         WhatsappNo: whatsapp.trim(),
         EmailID: email.trim(),
-        GSTNo: gstNo.trim(),
+        GstNo: gstNo.trim(),
       });
 
       const updated = {
@@ -178,7 +178,7 @@ export default function CustomersPage({
         MobileNo: mobile.trim(),
         WhatsappNo: whatsapp.trim(),
         EmailID: email.trim(),
-        GSTNo: gstNo.trim(),
+        GstNo: gstNo.trim(),
       };
       setAreas((current) =>
         current.map((a) => ({

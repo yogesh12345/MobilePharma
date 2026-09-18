@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type R
 import API from "../services/api";
 import GenericAutoComplete from "../components/GenericAutoComplete";
 import FloatingLabelDecimalInput from "../components/FloatingLabelDecimalInput";
-import { sendMedia } from "../services/whatsappService";
+import { sendMedia, sendText } from "../services/whatsappService";
 
 type Customer = {
   id: number;
@@ -20,7 +20,7 @@ type Customer = {
   MobileNo?: string;
   WhatsappNo?: string;
   EmailID?: string;
-  GSTNo?: string;
+  GstNo?: string;
 };
 
 type ItemInfo = {
@@ -64,6 +64,8 @@ type CartItem = ItemInfo & {
   Qty2: number;
   pending: boolean;
 };
+
+type SalesOrderShareFormat = "pdf" | "image" | "text";
 
 type OrderListRow = {
   ID: number;
@@ -217,6 +219,41 @@ const money = (value: number) =>
     maximumFractionDigits: 2,
   });
 
+const salesOrderShareMessage = [
+  "Dear Sir/Madam,",
+  "",
+  "Your Order has been accepted. Please see the attachment.",
+  "",
+  "Thanks for your business.",
+  "",
+  "Meena Agencies",
+].join("\n");
+
+const salesOrderText = (
+  orderNumber: string,
+  orderDate: string,
+  status: string,
+  items: CartItem[],
+) => [
+  "Dear Sir/Madam,",
+  "",
+  "Your order has been accepted as follows:",
+  "",
+  `🧾 SO No.: ${orderNumber}`,
+  `📅 Date: ${displayDateTime(orderDate)}`,
+  `📌 Status: ${status}`,
+  "",
+  "Items:",
+  ...items.map(
+    (item, index) =>
+      `${index + 1}. ${item.ItemName} – ${item.Packing || "-"} × ${Number(item.Qty1 || 0) + Number(item.Qty2 || 0)}`,
+  ),
+  "",
+  "Thank you for your business. 🙏",
+  "",
+  "Meena Agencies",
+].join("\n");
+
 const isExplicitlyInactive = (value: unknown) => {
   if (value === undefined || value === null || value === "") return false;
   if (typeof value === "boolean") return !value;
@@ -326,6 +363,10 @@ export default function SalesOrderPage({
   const [draftSoDate, setDraftSoDate] = useState(todayISODate());
   const [newOrderSavedId, setNewOrderSavedId] = useState<number | null>(null);
   const [showCart, setShowCart] = useState(false);
+  const [shareFormat, setShareFormat] = useState<SalesOrderShareFormat>(() => {
+    const saved = window.localStorage.getItem("sales-order-share-format");
+    return saved === "image" || saved === "text" ? saved : "pdf";
+  });
   const selectedItemEditorRef = useRef<HTMLDivElement | null>(null);
   const customerSelectRef = useRef<HTMLInputElement | null>(null);
   const itemSelectRef = useRef<HTMLInputElement | null>(null);
@@ -894,7 +935,7 @@ export default function SalesOrderPage({
         MobileNo: mappedCustomer?.MobileNo || header.MobileNo || "",
         WhatsappNo: mappedCustomer?.WhatsappNo || header.WhatsappNo || "",
         EmailID: mappedCustomer?.EmailID || header.EmailID || "",
-        GSTNo: mappedCustomer?.GSTNo || header.GSTNo || "",
+        GstNo: mappedCustomer?.GstNo || header.GstNo || "",
       };
       const loadedRows = rows.map((item: any) => ({
         uid: newUid(),
@@ -963,6 +1004,61 @@ export default function SalesOrderPage({
     setBusy(true);
     setMessage("");
     try {
+      const selectedForPrint = selectedCustomer ?? selectedOrder?.customer;
+      let target = String(selectedForPrint?.WhatsappNo || "").trim();
+      if (selectedForPrint?.id) {
+        try {
+          const customerResponse = await API.get(`/customers/${selectedForPrint.id}`);
+          target = String(
+            customerResponse.data?.SalesInvDefaultWhatsapp ||
+              customerResponse.data?.WhatsappNo ||
+              target,
+          ).trim();
+        } catch {
+          // Use the number captured when the customer was selected.
+        }
+      }
+      if (!target) {
+        setMessage("The selected customer has no WhatsApp number.");
+        return;
+      }
+
+      const orderNumber = entrySoNumber || `SO-${orderId}`;
+      const orderText = salesOrderText(orderNumber, entrySoDate, entryStatus, cart);
+      if (shareFormat === "text") {
+        await sendText(target, orderText);
+        setMessage("Sales Order text sent to the customer on WhatsApp.");
+        return;
+      }
+
+      if (shareFormat === "image") {
+        const res = await API.get(`/so/${orderId}/pdf-link`, { params: { format: "png" } });
+        const outputUrl = String(res.data?.downloadUrl || res.data?.outputUrl || "").trim();
+        if (!outputUrl) {
+          setMessage("PNG report generated, but no file URL was returned.");
+          return;
+        }
+        const baseUrl = String(API.defaults.baseURL || window.location.origin);
+        const pngUrl = new URL(outputUrl, baseUrl).toString();
+        const pngResponse = await API.get(pngUrl, { responseType: "arraybuffer" });
+        const bytes = new Uint8Array(pngResponse.data);
+        const chunkSize = 0x8000;
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        const pngBase64 = `data:image/png;base64,${btoa(binary)}`;
+
+        await sendMedia(
+          target,
+          pngBase64,
+          `${orderNumber}.png`,
+          salesOrderShareMessage,
+        );
+        setMessage("Jasper Sales Order image sent to the customer on WhatsApp.");
+        return;
+      }
+
       const res = await API.get(`/so/${orderId}/pdf-link`);
       const outputUrl = String(res.data?.downloadUrl || res.data?.outputUrl || "").trim();
       if (!outputUrl) {
@@ -979,35 +1075,19 @@ export default function SalesOrderPage({
         binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
       }
       const pdfBase64 = `data:application/pdf;base64,${btoa(binary)}`;
-      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-      const opened = window.open(blobUrl, "_blank", "noopener,noreferrer");
-      if (!opened) window.location.href = blobUrl;
 
-      const selectedForPrint = selectedCustomer ?? selectedOrder?.customer;
-      let target = String(selectedForPrint?.WhatsappNo || "").trim();
-      if (selectedForPrint?.id) {
-        try {
-          const customerResponse = await API.get(`/customers/${selectedForPrint.id}`);
-          target = String(
-            customerResponse.data?.SalesInvDefaultWhatsapp ||
-              customerResponse.data?.WhatsappNo ||
-              target,
-          ).trim();
-        } catch {
-          // Use the number captured when the customer was selected.
-        }
-      }
-      if (!target) {
-        setMessage("SO PDF generated, but the selected customer has no WhatsApp number.");
-        return;
-      }
-      await sendMedia(target, pdfBase64, `${entrySoNumber || `SO-${orderId}`}.pdf`, `Sales Order ${entrySoNumber}`);
+      await sendMedia(target, pdfBase64, `${orderNumber}.pdf`, salesOrderShareMessage);
       setMessage("SO PDF generated and sent to the customer on WhatsApp.");
     } catch (error: any) {
       setMessage(error?.response?.data?.error || "Unable to print sales order.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const updateShareFormat = (format: SalesOrderShareFormat) => {
+    setShareFormat(format);
+    window.localStorage.setItem("sales-order-share-format", format);
   };
 
   const selectedHeading = selectedCustomer ?? selectedOrder?.customer;
@@ -1262,7 +1342,7 @@ export default function SalesOrderPage({
         {onEditCustomer &&
           selectedHeading &&
           (!selectedHeading.MobileNo?.trim() ||
-            !selectedHeading.GSTNo?.trim() ||
+            !selectedHeading.GstNo?.trim() ||
             !selectedHeading.WhatsappNo?.trim() ||
             !selectedHeading.EmailID?.trim()) && (
             <div className="border-b border-slate-200 px-3 py-3">
@@ -1517,6 +1597,18 @@ export default function SalesOrderPage({
               newOrderSavedId ? "grid-cols-2" : cart.length > 0 ? "grid-cols-4" : "grid-cols-2"
           }`}
         >
+          <label className="col-span-full flex items-center justify-between gap-3 text-xs font-semibold text-slate-700">
+            <span>WhatsApp format</span>
+            <select
+              value={shareFormat}
+              onChange={(event) => updateShareFormat(event.target.value as SalesOrderShareFormat)}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800"
+            >
+              <option value="pdf">PDF with message</option>
+              <option value="image">Image with message</option>
+              <option value="text">SO in text format</option>
+            </select>
+          </label>
           {reviewMode ? (
             <>
               {reviewHasChanges && canEditSelectedOrder ? (

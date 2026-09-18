@@ -23,3 +23,13 @@ export const sendMedia = async (to: string, base64: string, filename: string, ca
   });
   return response.data;
 };
+
+export const sendText = async (to: string, message: string) => {
+  await ensureRegistration();
+  const response = await API.post("/api/whatsapp/send-message", {
+    session: sessionId(),
+    to,
+    message,
+  });
+  return response.data;
+};

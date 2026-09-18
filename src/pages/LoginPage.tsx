@@ -46,7 +46,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         identifier: identifier.trim(),
         password,
         clientType: "mobile",
-      });
+      }, { timeout: 30000 });
       const token = response.data?.token;
       if (!token) throw new Error("Login succeeded but no token was returned.");
       await removeStoredPermissions();
