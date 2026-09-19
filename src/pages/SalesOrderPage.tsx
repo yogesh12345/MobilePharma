@@ -640,12 +640,44 @@ export default function SalesOrderPage({
 
   useEffect(() => {
     if (!selectedItem) return;
-    const timer = window.setTimeout(() => {
-      selectedItemEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const keepEditorVisible = () => {
+      const editor = selectedItemEditorRef.current;
+      if (!editor) return;
+
+      editor.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => {
+        const current = selectedItemEditorRef.current;
+        if (!current) return;
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const topInset = 76;
+        const bottomInset = 118;
+        const rect = current.getBoundingClientRect();
+        const delta =
+          rect.top < topInset
+            ? rect.top - topInset
+            : rect.bottom > viewportHeight - bottomInset
+              ? rect.bottom - (viewportHeight - bottomInset)
+              : 0;
+        if (Math.abs(delta) > 2) window.scrollBy({ top: delta, behavior: "smooth" });
+      }, 120);
+    };
+
+    const timers = [50, 350, 750].map((delay) =>
+      window.setTimeout(keepEditorVisible, delay),
+    );
+    const viewport = window.visualViewport;
+    const handleViewportResize = () => window.setTimeout(keepEditorVisible, 80);
+    viewport?.addEventListener("resize", handleViewportResize);
+    keepEditorVisible();
+    const focusTimer = window.setTimeout(() => {
       qtyInputRef.current?.focus();
       qtyInputRef.current?.select();
     }, 50);
-    return () => window.clearTimeout(timer);
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.clearTimeout(focusTimer);
+      viewport?.removeEventListener("resize", handleViewportResize);
+    };
   }, [selectedItem]);
 
   const resetEntry = () => {
