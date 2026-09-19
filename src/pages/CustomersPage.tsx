@@ -304,16 +304,41 @@ export default function CustomersPage({
             <button
               type="button"
               onClick={() => returnToSourceView()}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700"
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700"
             >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m7 7 10 10M17 7 7 17" />
+              </svg>
               Cancel
             </button>
             <button
               type="button"
               disabled={!canUpdateContact || !hasChange || saving}
               onClick={saveCustomer}
-              className="rounded-md bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
             >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 4h12l2 2v14H5z" />
+                <path d="M8 4v5h8V4M8 20v-6h8v6" />
+              </svg>
               {saving ? "Updating..." : "Update"}
             </button>
           </div>

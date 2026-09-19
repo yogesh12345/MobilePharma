@@ -353,11 +353,17 @@ const distinctCartItems = (items: CartItem[]) => {
   return Array.from(byItem.values());
 };
 
-const CartCountIcon = ({ count }: { count: number }) => (
-  <div className="grid min-h-12 min-w-12 place-items-center rounded-full text-blue-800">
+const CartCountIcon = ({ count, compact = false }: { count: number; compact?: boolean }) => (
+  <div
+    className={
+      compact
+        ? "inline-flex items-center gap-1 text-blue-800"
+        : "grid min-h-12 min-w-12 place-items-center rounded-full text-blue-800"
+    }
+  >
     <svg
       viewBox="0 0 24 24"
-      className="h-8 w-8"
+      className={compact ? "h-5 w-5" : "h-8 w-8"}
       fill="none"
       stroke="currentColor"
       strokeWidth="1.9"
@@ -369,7 +375,13 @@ const CartCountIcon = ({ count }: { count: number }) => (
       <circle cx="18" cy="20" r="1" />
       <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H6" />
     </svg>
-    <span className="-mt-1 text-[11px] font-black leading-none text-blue-900">
+    <span
+      className={
+        compact
+          ? "text-sm font-black leading-none text-blue-900"
+          : "-mt-1 text-[11px] font-black leading-none text-blue-900"
+      }
+    >
       {count}
     </span>
     <span className="sr-only">Cart items: {count}</span>
@@ -1414,6 +1426,12 @@ export default function SalesOrderPage({
 
   const renderEntry = (reviewMode = false) => {
     const itemEntryMode = !showCart && (!reviewMode || reviewAddingItem);
+    const visibleItemSearchResults = itemSearchResults.filter(
+      (item) => item.id !== selectedItem?.id,
+    );
+    const visibleCompanyItems = companyItems.filter(
+      (item) => item.id !== selectedItem?.id,
+    );
 
     return (
     <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
@@ -1638,10 +1656,10 @@ export default function SalesOrderPage({
                   <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
                     {loadingItemSearch ? (
                       <div className="p-3 text-sm text-slate-500">Loading items...</div>
-                    ) : itemSearchResults.length === 0 ? (
+                    ) : visibleItemSearchResults.length === 0 ? (
                       <div className="p-3 text-sm text-slate-500">No matching items.</div>
                     ) : (
-                      itemSearchResults.map(renderItemResultButton)
+                      visibleItemSearchResults.map(renderItemResultButton)
                     )}
                   </div>
                 )}
@@ -1657,10 +1675,10 @@ export default function SalesOrderPage({
                     </div>
                     {loadingCompanyItems ? (
                       <div className="p-3 text-sm text-slate-500">Loading items...</div>
-                    ) : companyItems.length === 0 ? (
+                    ) : visibleCompanyItems.length === 0 ? (
                       <div className="p-3 text-sm text-slate-500">No items.</div>
                     ) : (
-                      companyItems.map(renderItemResultButton)
+                      visibleCompanyItems.map(renderItemResultButton)
                     )}
                   </section>
                 ) : (
@@ -1976,7 +1994,9 @@ export default function SalesOrderPage({
               >
                 <span className="flex min-w-0 items-center justify-between gap-3">
                   <span className="min-w-0 truncate font-bold text-slate-900">{order.CustomerName}</span>
-                  <span className="shrink-0 font-bold text-blue-800">{order.NumItems || 0} items</span>
+                  <span className="shrink-0 font-bold text-blue-800">
+                    <CartCountIcon count={order.NumItems || 0} compact />
+                  </span>
                 </span>
                 <span className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2 text-xs text-slate-600">
                   <span className="min-w-0 truncate">{order.SONumber}</span>
