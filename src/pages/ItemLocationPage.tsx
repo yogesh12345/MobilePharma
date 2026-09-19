@@ -211,7 +211,7 @@ export default function ItemLocationPage({
         </header>
       )}
 
-      <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4 sm:py-5">
+      <div className="mx-auto w-full max-w-3xl px-3 py-4 pb-24 sm:px-4 sm:py-5">
         <section className="rounded-xl border border-blue-200 bg-white p-4 shadow-md sm:p-5">
           <div className="mb-6">
             <fieldset className="min-w-0 rounded-lg border-2 border-blue-400 bg-white px-2 pb-1 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100">
@@ -359,7 +359,8 @@ export default function ItemLocationPage({
                 </div>
               )}
 
-              <div className="flex flex-col-reverse gap-3 border-t border-blue-100 pt-5 sm:flex-row sm:justify-end">
+              <div className="fixed inset-x-0 bottom-0 z-30 border-t border-blue-100 bg-white/95 px-3 py-3 shadow-lg backdrop-blur">
+                <div className="mx-auto flex w-full max-w-3xl flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={handleCancel}
@@ -376,6 +377,7 @@ export default function ItemLocationPage({
                 >
                   {saving ? "Updating..." : "Update"}
                 </button>
+                </div>
               </div>
             </div>
           ) : (

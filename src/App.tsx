@@ -13,6 +13,7 @@ type AuthState = "checking" | "authenticated" | "guest";
 
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>("checking");
+  const [loggedInUserName, setLoggedInUserName] = useState("User");
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -98,10 +99,15 @@ export default function App() {
         </main>
       ) : authState === "authenticated" ? (
         <PermissionProvider>
-          <MobileTabsPage onLogout={logout} />
+          <MobileTabsPage onLogout={logout} initialUserName={loggedInUserName} />
         </PermissionProvider>
       ) : (
-        <LoginPage onLogin={() => setAuthState("authenticated")} />
+        <LoginPage
+          onLogin={(identifier) => {
+            if (identifier) setLoggedInUserName(identifier);
+            setAuthState("authenticated");
+          }}
+        />
       )}
     </>
   );

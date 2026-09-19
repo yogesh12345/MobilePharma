@@ -53,11 +53,6 @@ type CompanyRow = {
   ItemCount: number;
 };
 
-type AutoCompleteItem = {
-  id: number | string;
-  label1: string;
-};
-
 type CartItem = ItemInfo & {
   uid: string;
   rowId?: number;
@@ -89,7 +84,7 @@ type LoadedOrder = {
   customer: Customer;
 };
 
-const orderStatuses = ["Saved", "Submitted", "Pending", "Invoiced", "Delivered", "Cancelled"];
+const orderStatuses = ["Saved", "Submitted", "Cancelled", "Invoiced", "Delivered"];
 const ITEM_SEARCH_MIN_CHARS = 3;
 
 const buttonBase =
@@ -142,7 +137,7 @@ const BottomActionButton = ({
   </button>
 );
 
-const PrintActionButton = ({
+const FloatingPrintButton = ({
   disabled,
   format,
   onFormatChange,
@@ -151,43 +146,52 @@ const PrintActionButton = ({
   disabled?: boolean;
   format: SalesOrderShareFormat;
   onFormatChange: (format: SalesOrderShareFormat) => void;
-  onPrint: () => void;
-}) => (
-  <div className="flex h-10 w-14 items-stretch">
-    <BottomActionButton
-      type="button"
-      disabled={disabled}
-      onClick={onPrint}
-      label="Print"
-      icon="print"
-      className={`w-10 rounded-r-none text-white ${
-        format === "pdf"
-          ? "bg-amber-600"
-          : format === "image"
-            ? "bg-emerald-600"
-            : "bg-blue-600"
-      }`}
-    />
-    <select
-      aria-label="Choose WhatsApp format"
-      title="Choose WhatsApp format"
-      value={format}
-      disabled={disabled}
-      onChange={(event) => onFormatChange(event.target.value as SalesOrderShareFormat)}
-      className={`w-4 cursor-pointer rounded-r-md border-l border-white/60 px-0 text-[0px] text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
-        format === "pdf"
-          ? "bg-amber-600"
-          : format === "image"
-            ? "bg-emerald-600"
-            : "bg-blue-600"
-      }`}
-    >
-      <option value="pdf">PDF</option>
-      <option value="image">Image</option>
-      <option value="text">Text</option>
-    </select>
-  </div>
-);
+  onPrint: (format?: SalesOrderShareFormat) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const options: Array<{ value: SalesOrderShareFormat; label: string }> = [
+    { value: "pdf", label: "WhatsApp PDF" },
+    { value: "image", label: "WhatsApp Image" },
+    { value: "text", label: "WhatsApp Text" },
+  ];
+
+  return (
+    <div className="fixed bottom-20 right-4 z-40 flex flex-col items-end gap-2">
+      {open && (
+        <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-xl" role="menu">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                onFormatChange(option.value);
+                setOpen(false);
+                onPrint(option.value);
+              }}
+              className={`block w-full whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-semibold transition hover:bg-blue-50 disabled:opacity-50 ${
+                format === option.value ? "text-blue-700" : "text-slate-700"
+              }`}
+              role="menuitem"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg ring-4 ring-white transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Print and send order on WhatsApp"
+        aria-expanded={open}
+      >
+        <ActionIcon name="print" />
+      </button>
+    </div>
+  );
+};
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
@@ -228,7 +232,7 @@ const incrementTrailingNumber = (value?: string) => {
 const statusForMobile = (status?: string) => {
   const upper = String(status || "").toUpperCase();
   if (upper === "SAVED") return "Saved";
-  if (upper === "PARTIAL" || upper === "PENDING" || upper === "OPEN-PENDING") return "Pending";
+  if (upper === "PARTIAL" || upper === "PENDING" || upper === "OPEN-PENDING") return "Saved";
   if (upper === "CANCELLED" || upper === "CANCELED") return "Cancelled";
   if (upper === "INVOICED") return "Invoiced";
   if (upper === "DELIVERED") return "Delivered";
@@ -414,8 +418,6 @@ export default function SalesOrderPage({
   const [selectedItem, setSelectedItem] = useState<ItemInfo | null>(null);
   const [editingCartUid, setEditingCartUid] = useState<string | null>(null);
   const [itemSourceTab, setItemSourceTab] = useState<"search" | "companies">("search");
-  const [itemSearchResults, setItemSearchResults] = useState<ItemInfo[]>([]);
-  const [loadingItemSearch, setLoadingItemSearch] = useState(false);
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [companySearch, setCompanySearch] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyRow | null>(null);
@@ -431,6 +433,7 @@ export default function SalesOrderPage({
   const [draftSoNumber, setDraftSoNumber] = useState("New");
   const [draftSoDate, setDraftSoDate] = useState(todayISODate());
   const [newOrderSavedId, setNewOrderSavedId] = useState<number | null>(null);
+  const [savedCartSignature, setSavedCartSignature] = useState("");
   const [showCart, setShowCart] = useState(false);
   const [shareFormat, setShareFormat] = useState<SalesOrderShareFormat>(() => {
     const saved = window.localStorage.getItem("sales-order-share-format");
@@ -441,11 +444,8 @@ export default function SalesOrderPage({
   const itemSelectRef = useRef<HTMLInputElement | null>(null);
   const qtyInputRef = useRef<HTMLInputElement | null>(null);
   const freeInputRef = useRef<HTMLInputElement | null>(null);
-  const customerUpdateButtonRef = useRef<HTMLButtonElement | null>(null);
-  const handledCustomerUpdateKey = useRef(0);
 
   const cartCount = cart.length;
-  const pendingItems = cart.filter((item) => item.pending);
 
   useEffect(() => {
     if (!customerUpdate || customerUpdateFocusRequestKey <= 0) return;
@@ -458,16 +458,6 @@ export default function SalesOrderPage({
         : current,
     );
   }, [customerUpdate, customerUpdateFocusRequestKey]);
-
-  useEffect(() => {
-    if (
-      customerUpdateFocusRequestKey <= 0 ||
-      customerUpdateFocusRequestKey === handledCustomerUpdateKey.current
-    ) return;
-    handledCustomerUpdateKey.current = customerUpdateFocusRequestKey;
-    const timer = window.setTimeout(() => customerUpdateButtonRef.current?.focus(), 100);
-    return () => window.clearTimeout(timer);
-  }, [customerUpdateFocusRequestKey]);
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -597,60 +587,6 @@ export default function SalesOrderPage({
   }, [itemSourceTab, selectedCustomer, selectedOrder]);
 
   useEffect(() => {
-    if (!selectedCustomer && !selectedOrder) return;
-    if (itemSourceTab !== "search") return;
-    const query = itemQuery.trim();
-    if (query.length < ITEM_SEARCH_MIN_CHARS) {
-      setItemSearchResults([]);
-      setLoadingItemSearch(false);
-      return;
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      setLoadingItemSearch(true);
-      try {
-        const res = await API.get("/mobile/sales-orders/items/search", {
-          params: { query, asOnDate: todayISODate() },
-        });
-        if (!cancelled) {
-          let rows = Array.isArray(res.data?.items) ? (res.data.items as ItemInfo[]) : [];
-          if (rows.length === 0) {
-            const fallback = await API.get("/mobile/sales-orders/items", {
-              params: { query, asOnDate: todayISODate() },
-            });
-            const autocompleteRows = Array.isArray(fallback.data?.items)
-              ? (fallback.data.items as AutoCompleteItem[])
-              : [];
-            rows = await hydrateItemDetails(autocompleteRows, 50);
-          }
-          if (!cancelled) setItemSearchResults(rows);
-        }
-      } catch {
-        try {
-          const fallback = await API.get("/mobile/sales-orders/items", {
-            params: { query, asOnDate: todayISODate() },
-          });
-          const autocompleteRows = Array.isArray(fallback.data?.items)
-            ? (fallback.data.items as AutoCompleteItem[])
-            : [];
-          const rows = await hydrateItemDetails(autocompleteRows, 50);
-          if (!cancelled) setItemSearchResults(rows);
-        } catch {
-          if (!cancelled) setItemSearchResults([]);
-        }
-      } finally {
-        if (!cancelled) setLoadingItemSearch(false);
-      }
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [itemQuery, itemSourceTab, selectedCustomer, selectedOrder]);
-
-  useEffect(() => {
     if (!selectedItem) return;
     const keepEditorVisible = () => {
       const editor = selectedItemEditorRef.current;
@@ -697,9 +633,9 @@ export default function SalesOrderPage({
     setSelectedOrder(null);
     setCart([]);
     setLoadedCartSignature("");
+    setSavedCartSignature("");
     setCartSearch("");
     setItemQuery("");
-    setItemSearchResults([]);
     setSelectedItem(null);
     setEditingCartUid(null);
     setItemSourceTab("search");
@@ -721,9 +657,9 @@ export default function SalesOrderPage({
     setSelectedOrder(null);
     setCart([]);
     setLoadedCartSignature("");
+    setSavedCartSignature("");
     setCartSearch("");
     setItemQuery("");
-    setItemSearchResults([]);
     setSelectedItem(null);
     setEditingCartUid(null);
     setItemSourceTab("search");
@@ -768,6 +704,7 @@ export default function SalesOrderPage({
 
   const handleItemSelect = async (item: { id: number | string; label1: string }) => {
     setMessage("");
+    setItemQuery("");
     try {
       setSelectedItem(await loadItemDetail(item.id));
       setEditingCartUid(null);
@@ -787,7 +724,7 @@ export default function SalesOrderPage({
   const selectItemInfo = (item: ItemInfo) => {
     setSelectedItem(item);
     setEditingCartUid(null);
-    setItemQuery(item.ItemName);
+    setItemQuery("");
     setShowCart(false);
     setMessage("");
     const activeElement = document.activeElement;
@@ -883,7 +820,6 @@ export default function SalesOrderPage({
       ]);
     });
     setItemQuery("");
-    setItemSearchResults([]);
     setSelectedItem(null);
     setEditingCartUid(null);
     setQty1(1);
@@ -894,7 +830,6 @@ export default function SalesOrderPage({
   };
 
   const statusForAction = (mode: "save" | "submit" | "update") => {
-    if (pendingItems.length > 0) return "PENDING";
     if (mode === "save") return "SAVED";
     if (mode === "submit") return "SUBMITTED";
     const current = String(selectedOrder?.header?.Status || "").toUpperCase();
@@ -962,13 +897,7 @@ export default function SalesOrderPage({
             : current,
         );
         setLoadedCartSignature(cartSignature(cart));
-        setMessage(
-          status === "PENDING"
-            ? "Order saved as pending due to stock availability."
-            : mode === "submit"
-              ? "Order submitted."
-              : "Order saved.",
-        );
+        setMessage(mode === "submit" ? "Order submitted." : "Order saved.");
         await loadOrders();
         return;
       }
@@ -980,12 +909,7 @@ export default function SalesOrderPage({
           PeriodFrom: toApiDateTime(draftSoDate),
           PeriodTo: toApiDateTime(draftSoDate),
           SalesRep: "",
-          Remarks:
-            status === "PENDING"
-              ? "Mobile order pending due to stock availability."
-              : mode === "submit"
-                ? "Mobile sales order submitted."
-                : "Mobile sales order saved.",
+          Remarks: mode === "submit" ? "Mobile sales order submitted." : "Mobile sales order saved.",
           OverallDiscPct: 0,
           Status: status,
         },
@@ -996,14 +920,9 @@ export default function SalesOrderPage({
         createResponse.data?.id || createResponse.data?.ID || createResponse.data?.header?.ID || 0,
       );
       setNewOrderSavedId(createdId > 0 ? createdId : null);
+      setSavedCartSignature(createdId > 0 ? cartSignature(cart) : "");
 
-      setMessage(
-        status === "PENDING"
-          ? "Order saved as pending due to stock availability."
-          : mode === "submit"
-            ? "Order submitted."
-            : "Order saved.",
-      );
+      setMessage(mode === "submit" ? "Order submitted." : "Order saved.");
       setCartSearch("");
       setSelectedItem(null);
       setEditingCartUid(null);
@@ -1077,6 +996,7 @@ export default function SalesOrderPage({
       const distinctLoadedRows = distinctCartItems(loadedRows);
       setCart(distinctLoadedRows);
       setLoadedCartSignature(cartSignature(distinctLoadedRows));
+      setSavedCartSignature("");
       setCartSearch("");
       setSelectedItem(null);
       setEditingCartUid(null);
@@ -1099,7 +1019,7 @@ export default function SalesOrderPage({
     setMessage("");
   };
 
-  const printSelectedOrder = async () => {
+  const printSelectedOrder = async (requestedFormat = shareFormat) => {
     const orderId = selectedOrder?.header?.ID || newOrderSavedId;
     if (!orderId) {
       setMessage("Sales order saved, but its print reference was not returned.");
@@ -1129,13 +1049,13 @@ export default function SalesOrderPage({
 
       const orderNumber = entrySoNumber || `SO-${orderId}`;
       const orderText = salesOrderText(orderNumber, entrySoDate, entryStatus, cart);
-      if (shareFormat === "text") {
+      if (requestedFormat === "text") {
         await sendText(target, orderText);
         setMessage("Sales Order text sent to the customer on WhatsApp.");
         return;
       }
 
-      if (shareFormat === "image") {
+      if (requestedFormat === "image") {
         const res = await API.get(`/so/${orderId}/pdf-link`, { params: { format: "png" } });
         const outputUrl = String(res.data?.downloadUrl || res.data?.outputUrl || "").trim();
         if (!outputUrl) {
@@ -1199,14 +1119,17 @@ export default function SalesOrderPage({
   const entrySoDate = String(selectedOrder?.header?.SODate || draftSoDate || todayISODate());
   const entryStatus = selectedOrder
     ? statusForMobile(selectedOrder.header?.Status)
-    : pendingItems.length > 0
-      ? "Pending"
-      : "New";
+    : "New";
   const selectedOrderStatus = String(selectedOrder?.header?.Status || "");
   const canEditSelectedOrder = canEditSOStatus(selectedOrderStatus);
   const reviewHasChanges =
     Boolean(selectedOrder) && loadedCartSignature !== "" && cartSignature(cart) !== loadedCartSignature;
-
+  const printableStatuses = new Set(["SAVED", "SUBMITTED", "CANCELLED", "CANCELED"]);
+  const printStatus = normalizedStatus(selectedOrderStatus || (newOrderSavedId ? "SAVED" : ""));
+  const printReady = printableStatuses.has(printStatus) &&
+    (selectedOrder
+      ? showCart && !reviewHasChanges && !selectedItem
+      : Boolean(newOrderSavedId && savedCartSignature && cartSignature(cart) === savedCartSignature && showCart && !selectedItem));
   const filteredCompanies = useMemo(() => {
     const q = companySearch.trim().toLowerCase();
     if (!q) return companies;
@@ -1262,7 +1185,6 @@ export default function SalesOrderPage({
     setSelectedItem(null);
     setEditingCartUid(null);
     setItemQuery("");
-    setItemSearchResults([]);
     setItemSourceTab("search");
     setSelectedCompany(null);
     setCompanyItems([]);
@@ -1273,7 +1195,6 @@ export default function SalesOrderPage({
     setSelectedItem(null);
     setEditingCartUid(null);
     setItemQuery("");
-    setItemSearchResults([]);
     setReviewAddingItem(false);
     setShowCart(true);
     setMessage("");
@@ -1316,23 +1237,14 @@ export default function SalesOrderPage({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-semibold text-slate-900">{item.ItemName}</div>
-          <div className="mt-1 text-xs font-semibold text-slate-600">
-            {item.Packing} {item.CompShort ? `[${item.CompShort}]` : ""}
-          </div>
-        </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${
-            item.StockAvailable ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-          }`}
-        >
-          {item.StockAvailable ? "Available" : "Pending"}
-        </span>
+        <span className="min-w-0 truncate font-semibold text-slate-900">{item.ItemName}</span>
+        <span className="shrink-0 truncate text-xs font-semibold text-slate-600">{item.Packing}</span>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-xs font-medium text-slate-600">
-        <span>Rack: {item.RackNumber || "-"}</span>
-        <span>MRP: {money(item.MRP)}</span>
+      <div className="mt-1 flex items-center justify-between gap-2 text-xs font-medium text-slate-600">
+        <span className="truncate">{item.CompShort || ""}</span>
+        <span className="truncate">Rack: {item.RackNumber || "-"}</span>
+        <span className="truncate">MRP: {money(item.MRP)}</span>
+        {item.StockAvailable && <span className="shrink-0 font-semibold text-emerald-700">Available</span>}
       </div>
     </button>
   );
@@ -1426,9 +1338,6 @@ export default function SalesOrderPage({
 
   const renderEntry = (reviewMode = false) => {
     const itemEntryMode = !showCart && (!reviewMode || reviewAddingItem);
-    const visibleItemSearchResults = itemSearchResults.filter(
-      (item) => item.id !== selectedItem?.id,
-    );
     const visibleCompanyItems = companyItems.filter(
       (item) => item.id !== selectedItem?.id,
     );
@@ -1437,7 +1346,13 @@ export default function SalesOrderPage({
     <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
       <section className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
         <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-3 py-2">
-          <div className="min-w-0">
+          <div
+            className={`min-w-0 ${onEditCustomer ? "cursor-pointer" : ""}`}
+            onDoubleClick={() => {
+              if (onEditCustomer && selectedHeading) onEditCustomer(selectedHeading);
+            }}
+            title={onEditCustomer ? "Double-click to update customer" : undefined}
+          >
             <div className="truncate text-base font-bold text-blue-950">
             {selectedHeading?.CustomerName}
             </div>
@@ -1481,24 +1396,6 @@ export default function SalesOrderPage({
             </button>
           </div>
         </div>
-
-        {onEditCustomer &&
-          selectedHeading &&
-          (!selectedHeading.MobileNo?.trim() ||
-            !selectedHeading.GstNo?.trim() ||
-            !selectedHeading.WhatsappNo?.trim() ||
-            !selectedHeading.EmailID?.trim()) && (
-            <div className="border-b border-slate-200 px-3 py-3">
-              <button
-                ref={customerUpdateButtonRef}
-                type="button"
-                onClick={() => onEditCustomer(selectedHeading)}
-                className="w-full rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-bold text-blue-700"
-              >
-                Update Customer
-              </button>
-            </div>
-          )}
 
         {showCart ? (
           <div className="max-h-[calc(100dvh-23rem)] overflow-y-auto divide-y divide-slate-200 pb-2">
@@ -1637,32 +1534,24 @@ export default function SalesOrderPage({
 
             {itemSourceTab === "search" ? (
               <>
-                <GenericAutoComplete
-                  ref={itemSelectRef}
-                  endpoint={`/mobile/sales-orders/items?asOnDate=${encodeURIComponent(
-                    todayISODate(),
-                  )}`}
-                  searchQuery={itemQuery}
-                  setSearchQuery={setItemQuery}
-                  onSelect={handleItemSelect}
-                  topLabel="Select Item"
-                  myplacehoder="Select Item [ Live ]"
-                  minChars={ITEM_SEARCH_MIN_CHARS}
-                  mode="live"
-                  hideFloatingLabel
-                />
-
-                {(loadingItemSearch || itemQuery.trim().length >= ITEM_SEARCH_MIN_CHARS) && (
-                  <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-                    {loadingItemSearch ? (
-                      <div className="p-3 text-sm text-slate-500">Loading items...</div>
-                    ) : visibleItemSearchResults.length === 0 ? (
-                      <div className="p-3 text-sm text-slate-500">No matching items.</div>
-                    ) : (
-                      visibleItemSearchResults.map(renderItemResultButton)
-                    )}
-                  </div>
+                {!selectedItem && (
+                  <GenericAutoComplete
+                    ref={itemSelectRef}
+                    endpoint={`/mobile/sales-orders/items/search?asOnDate=${encodeURIComponent(
+                      todayISODate(),
+                    )}`}
+                    searchQuery={itemQuery}
+                    setSearchQuery={setItemQuery}
+                    onSelect={handleItemSelect}
+                    topLabel="Select Item"
+                    myplacehoder="Select Item [ Live ]"
+                    minChars={ITEM_SEARCH_MIN_CHARS}
+                    mode="live"
+                    hideFloatingLabel
+                    salesOrderItemLayout
+                  />
                 )}
+
               </>
             ) : (
               <div className="space-y-3">
@@ -1735,7 +1624,7 @@ export default function SalesOrderPage({
         </div>
       )}
 
-      <div className="fixed inset-x-0 bottom-14 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
         <div
           className={`mx-auto grid max-w-3xl gap-2 ${
             itemEntryMode ? "grid-cols-2" : reviewMode ? (reviewHasChanges ? "grid-cols-3" : canEditSelectedOrder ? "grid-cols-5" : "grid-cols-3") :
@@ -1796,12 +1685,6 @@ export default function SalesOrderPage({
                     icon="new"
                     className={`${buttonBase} border border-blue-300 bg-white text-blue-700`}
                   />
-                  <PrintActionButton
-                    disabled={busy || !selectedOrder?.header?.ID}
-                    format={shareFormat}
-                    onFormatChange={updateShareFormat}
-                    onPrint={() => void printSelectedOrder()}
-                  />
                   {canEditSelectedOrder && (
                     <BottomActionButton
                       type="button"
@@ -1840,12 +1723,6 @@ export default function SalesOrderPage({
                   label="New"
                   icon="new"
                   className={`${buttonBase} bg-blue-600 text-white`}
-                />
-                <PrintActionButton
-                  disabled={busy || !newOrderSavedId}
-                  format={shareFormat}
-                  onFormatChange={updateShareFormat}
-                  onPrint={() => void printSelectedOrder()}
                 />
               </>
             ) : cart.length === 0 ? (
@@ -1902,6 +1779,14 @@ export default function SalesOrderPage({
           }
         </div>
       </div>
+      {printReady && (
+        <FloatingPrintButton
+          disabled={busy}
+          format={shareFormat}
+          onFormatChange={updateShareFormat}
+          onPrint={(format) => void printSelectedOrder(format)}
+        />
+      )}
     </div>
     );
   };

@@ -14,6 +14,7 @@ import SalesOrderPage, { type CustomerUpdate } from "./SalesOrderPage";
 
 interface MobileTabsPageProps {
   onLogout: () => void;
+  initialUserName?: string;
 }
 
 type RackTarget = {
@@ -46,6 +47,11 @@ const MODULE_PERMISSIONS: Record<
   companies: { resource: "mobile.company", action: "view" },
   customers: { resource: "mobile.customer", action: "view" },
   salesOrders: { resource: "mobile.salesOrder", action: "view" },
+};
+
+const displayUserName = (value: unknown) => {
+  const name = String(value || "").trim();
+  return name ? `${name.charAt(0).toUpperCase()}${name.slice(1)}` : "User";
 };
 
 function HomeIcon() {
@@ -86,10 +92,28 @@ function LogoutIcon() {
   );
 }
 
-export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
+function MenuIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabsPageProps) {
   const { canAccess, loading: permissionsLoading } = usePermissions();
   const [activeModule, setActiveModule] = useState<MobileModule | null>(null);
   const [salesOrderRoleAccess, setSalesOrderRoleAccess] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [userName, setUserName] = useState(() => displayUserName(initialUserName));
 
   const [rackTarget, setRackTarget] = useState<RackTarget | null>(null);
   const [companyFocusTarget, setCompanyFocusTarget] =
@@ -120,6 +144,31 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
       .catch(() => {
         if (!disposed) setSalesOrderRoleAccess(false);
       });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    void API.get("/me")
+      .then((response) => {
+        if (disposed) return;
+        const data = response.data?.user ?? response.data ?? {};
+        const name =
+          data.name ??
+          data.fullName ??
+          data.displayName ??
+          data.username ??
+          data.userName ??
+          data.email ??
+          data.Name ??
+          data.Username ??
+          data.UserName ??
+          data.Email;
+        if (String(name || "").trim()) setUserName(displayUserName(name));
+      })
+      .catch(() => undefined);
     return () => {
       disposed = true;
     };
@@ -231,7 +280,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
   };
 
   return (
-    <main className="min-h-dvh bg-gray-100 pb-20 text-gray-800">
+    <main className="min-h-dvh bg-gray-100 pb-4 text-gray-800">
       <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex min-h-[61px] w-full max-w-3xl items-center justify-between gap-3 px-3 py-2 sm:px-4">
           <div>
@@ -246,6 +295,58 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
               }
             </div>
           )}
+
+          <div className="relative ml-auto">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              className="inline-flex min-h-10 items-center gap-2 rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-900 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+            >
+              <MenuIcon />
+              <span className="hidden sm:inline">Menu</span>
+            </button>
+
+            {menuOpen && (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-40 cursor-default"
+                  aria-label="Close menu"
+                  onClick={() => setMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-xl" role="menu">
+                  <div className="border-b border-slate-200 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Logged in as</p>
+                    <p className="mt-1 truncate font-bold text-slate-900">{userName}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setActiveModule(null);
+                      setMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                  >
+                    <HomeIcon />
+                    Home
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={onLogout}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    <LogoutIcon />
+                    Logout
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -339,34 +440,6 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
         </>
       )}
 
-      {!permissionsLoading && allowedModules.length > 0 && (
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-200 bg-white/95 shadow-[0_-4px_14px_rgba(15,23,42,0.08)] backdrop-blur">
-          <div className="mx-auto grid min-h-14 w-full max-w-3xl grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setActiveModule(null)}
-              className={`flex flex-col items-center justify-center gap-1 text-xs font-semibold transition ${
-                selectedModule
-                  ? "text-slate-700 hover:bg-slate-50"
-                  : "bg-blue-50 text-blue-800"
-              }`}
-              aria-current={!selectedModule ? "page" : undefined}
-            >
-              <HomeIcon />
-              <span className="sr-only">Home</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onLogout}
-              className="flex flex-col items-center justify-center gap-1 text-xs font-semibold text-red-700 transition hover:bg-red-50"
-            >
-              <LogoutIcon />
-              <span className="sr-only">Logout</span>
-            </button>
-          </div>
-        </nav>
-      )}
     </main>
   );
 }

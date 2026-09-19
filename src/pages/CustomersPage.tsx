@@ -210,7 +210,7 @@ export default function CustomersPage({
 
   if (selected) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
+      <div className="mx-auto w-full max-w-3xl px-3 py-4 pb-24 sm:px-4">
         <button
           type="button"
           onClick={() => returnToSourceView()}
@@ -300,7 +300,8 @@ export default function CustomersPage({
             </div>
           )}
 
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-lg backdrop-blur">
+            <div className="mx-auto flex w-full max-w-3xl justify-end gap-2">
             <button
               type="button"
               onClick={() => returnToSourceView()}
@@ -341,6 +342,7 @@ export default function CustomersPage({
               </svg>
               {saving ? "Updating..." : "Update"}
             </button>
+            </div>
           </div>
           {message && <div className="mt-3 text-sm font-medium">{message}</div>}
         </section>

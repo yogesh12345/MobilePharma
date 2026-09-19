@@ -5,7 +5,7 @@ import FloatingLabelInput from "../components/FloatingLabelInput";
 import { removeStoredPermissions, setStoredToken } from "../services/storage";
 
 interface LoginPageProps {
-  onLogin: () => void;
+  onLogin: (identifier?: string) => void;
 }
 
 const getErrorMessage = (error: unknown) => {
@@ -52,7 +52,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       await removeStoredPermissions();
       setApiToken(token);
       await setStoredToken(token);
-      onLogin();
+      onLogin(identifier.trim());
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

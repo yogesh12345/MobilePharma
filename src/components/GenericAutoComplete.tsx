@@ -15,6 +15,7 @@ interface AutoCompleteItem {
   label3?: string;
   label4?: string;
   label5?: string;
+  label6?: string;
   PaymentMode?: string;
   paymentMode?: string;
 }
@@ -49,6 +50,8 @@ interface GenericAutoCompleteProps {
   secondaryLabels?: Array<"label2" | "label3" | "label4">;
   /** Whether to show label5 (default: true) */
   showLabel5?: boolean;
+  /** Compact two-line layout used by Sales Order item search results. */
+  salesOrderItemLayout?: boolean;
   /** Hide the floating label block completely when the table/header already provides context */
   hideFloatingLabel?: boolean;
   /** Removes the input border/focus ring when the parent grid already supplies the cell outline. */
@@ -292,7 +295,8 @@ const computeItemMatchScore = (item: AutoCompleteItem, query: string) => {
     item.label2,
     item.label3,
     item.label4,
-    item.label5,
+            item.label5,
+            item.label6,
   ].filter(Boolean);
   const fields = rawFields.map((value) => normalizeSearchValue(String(value)));
 
@@ -350,6 +354,7 @@ const GenericAutoComplete = React.forwardRef<
       allowRowArrowNavigationWhenClosed = false,
       secondaryLabels = ["label2", "label3", "label4"],
       showLabel5 = true,
+      salesOrderItemLayout = false,
       hideFloatingLabel = false,
       disableOutline = false,
       transparentBackground = false,
@@ -601,7 +606,7 @@ const GenericAutoComplete = React.forwardRef<
           return computeItemMatchScore(item, q) > 0;
         }
         return words.every((w) =>
-          [item.label1, item.label2, item.label3, item.label4, item.label5]
+          [item.label1, item.label2, item.label3, item.label4, item.label5, item.label6]
             .filter(Boolean)
             .some((lbl) => lbl && lbl.toLowerCase().includes(w))
         );
@@ -722,12 +727,15 @@ const GenericAutoComplete = React.forwardRef<
         onMouseDown={(e) => e.preventDefault()}
       >
         {items.map((item, index) => {
-          const isHighlighted = highlightedIndex === index;
+          const isHighlighted = highlightedIndex === index || (highlightedIndex < 0 && index === 0);
           const textColor = isHighlighted ? "text-white" : "text-gray-800";
           return (
             <div
               key={item.id}
               data-idx={index}
+              aria-selected={isHighlighted}
+              role="option"
+              onMouseEnter={() => setHighlightedIndex(index)}
               onClick={() => handleSelect(item)}
               className={`p-2 cursor-pointer transition-colors ${
                 isHighlighted
@@ -735,25 +743,42 @@ const GenericAutoComplete = React.forwardRef<
                   : "hover:bg-gray-100 even:bg-white odd:bg-gray-50"
               }`}
             >
-              <div className="font-medium">{item.label1}</div>
-              <div className={`${textColor} break-words`}>
-                {secondaryLabels
-                  .map((key) => item[key])
-                  .filter(Boolean)
-                  .map((line, idx) => (
-                    <div
-                      key={idx}
-                      className={`${
-                        idx === 0 ? "text-sm" : "text-xs"
-                      } ${textColor}`}
-                    >
-                      {line}
-                    </div>
-                  ))}
-                {showLabel5 && item.label5 && (
-                  <div className={`text-xs ${textColor}`}>{item.label5}</div>
-                )}
-              </div>
+              {salesOrderItemLayout ? (
+                <>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium">{item.label1}</span>
+                    <span className={`shrink-0 truncate text-xs ${textColor}`}>{item.label2}</span>
+                  </div>
+                  <div className={`mt-1 flex items-center justify-between gap-2 text-xs ${textColor}`}>
+                    <span className="truncate">{item.label3}</span>
+                    <span className="truncate">{item.label4}</span>
+                    {showLabel5 && <span className="truncate">{item.label5}</span>}
+                    <span className={`shrink-0 font-semibold ${isHighlighted ? "text-white" : "text-emerald-700"}`}>
+                      {item.label6}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-medium">{item.label1}</div>
+                  <div className={`${textColor} break-words`}>
+                    {secondaryLabels
+                      .map((key) => item[key])
+                      .filter(Boolean)
+                      .map((line, idx) => (
+                        <div
+                          key={idx}
+                          className={`${idx === 0 ? "text-sm" : "text-xs"} ${textColor}`}
+                        >
+                          {line}
+                        </div>
+                      ))}
+                    {showLabel5 && item.label5 && (
+                      <div className={`text-xs ${textColor}`}>{item.label5}</div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           );
         })}
