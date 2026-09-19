@@ -341,7 +341,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
 
       {!permissionsLoading && allowedModules.length > 0 && (
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-200 bg-white/95 shadow-[0_-4px_14px_rgba(15,23,42,0.08)] backdrop-blur">
-          <div className="mx-auto grid min-h-16 w-full max-w-3xl grid-cols-2">
+          <div className="mx-auto grid min-h-14 w-full max-w-3xl grid-cols-2">
             <button
               type="button"
               onClick={() => setActiveModule(null)}
@@ -353,7 +353,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
               aria-current={!selectedModule ? "page" : undefined}
             >
               <HomeIcon />
-              <span>Home</span>
+              <span className="sr-only">Home</span>
             </button>
 
             <button
@@ -362,7 +362,7 @@ export default function MobileTabsPage({ onLogout }: MobileTabsPageProps) {
               className="flex flex-col items-center justify-center gap-1 text-xs font-semibold text-red-700 transition hover:bg-red-50"
             >
               <LogoutIcon />
-              <span>Logout</span>
+              <span className="sr-only">Logout</span>
             </button>
           </div>
         </nav>

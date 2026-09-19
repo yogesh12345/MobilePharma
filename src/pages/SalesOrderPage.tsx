@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type R
 import API from "../services/api";
 import GenericAutoComplete from "../components/GenericAutoComplete";
 import FloatingLabelDecimalInput from "../components/FloatingLabelDecimalInput";
+import FloatingLabelInput from "../components/FloatingLabelInput";
 import { sendMedia, sendText } from "../services/whatsappService";
 
 type Customer = {
@@ -132,11 +133,60 @@ const BottomActionButton = ({
 }) => (
   <button
     {...props}
-    className={`${buttonBase} inline-flex items-center justify-center gap-1 text-xs ${className}`}
+    aria-label={props["aria-label"] || label}
+    title={label}
+    className={`${buttonBase} inline-flex h-10 w-10 items-center justify-center p-2 text-xs ${className}`}
   >
     <ActionIcon name={icon} />
-    <span>{label}</span>
+    <span className="sr-only">{label}</span>
   </button>
+);
+
+const PrintActionButton = ({
+  disabled,
+  format,
+  onFormatChange,
+  onPrint,
+}: {
+  disabled?: boolean;
+  format: SalesOrderShareFormat;
+  onFormatChange: (format: SalesOrderShareFormat) => void;
+  onPrint: () => void;
+}) => (
+  <div className="flex h-10 w-14 items-stretch">
+    <BottomActionButton
+      type="button"
+      disabled={disabled}
+      onClick={onPrint}
+      label="Print"
+      icon="print"
+      className={`w-10 rounded-r-none text-white ${
+        format === "pdf"
+          ? "bg-amber-600"
+          : format === "image"
+            ? "bg-emerald-600"
+            : "bg-blue-600"
+      }`}
+    />
+    <select
+      aria-label="Choose WhatsApp format"
+      title="Choose WhatsApp format"
+      value={format}
+      disabled={disabled}
+      onChange={(event) => onFormatChange(event.target.value as SalesOrderShareFormat)}
+      className={`w-4 cursor-pointer rounded-r-md border-l border-white/60 px-0 text-[0px] text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+        format === "pdf"
+          ? "bg-amber-600"
+          : format === "image"
+            ? "bg-emerald-600"
+            : "bg-blue-600"
+      }`}
+    >
+      <option value="pdf">PDF</option>
+      <option value="image">Image</option>
+      <option value="text">Text</option>
+    </select>
+  </div>
 );
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
@@ -212,6 +262,13 @@ const toNumber = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const customerGstNo = (row: Partial<Customer>) => String(row.GstNo ?? "");
+
+const normalizeCustomer = (row: Customer): Customer => ({
+  ...row,
+  GstNo: customerGstNo(row).trim(),
+});
 
 const money = (value: number) =>
   Number(value || 0).toLocaleString("en-IN", {
@@ -405,7 +462,9 @@ export default function SalesOrderPage({
     setMessage("");
     try {
       const res = await API.get("/mobile/sales-orders/customers");
-      const rows = Array.isArray(res.data?.customers) ? (res.data.customers as Customer[]) : [];
+      const rows = Array.isArray(res.data?.customers)
+        ? (res.data.customers as Customer[]).map(normalizeCustomer)
+        : [];
       setCustomers(selectableMappedCustomers(rows));
     } catch {
       setCustomers([]);
@@ -452,7 +511,7 @@ export default function SalesOrderPage({
           : API.get("/mobile/sales-orders/customers"),
       ]);
       const mappedCustomers = Array.isArray(customersRes.data?.customers)
-        ? (customersRes.data.customers as Customer[])
+        ? (customersRes.data.customers as Customer[]).map(normalizeCustomer)
         : [];
       const activeMappedCustomers = selectableMappedCustomers(mappedCustomers);
       if (customers.length === 0) setCustomers(activeMappedCustomers);
@@ -582,6 +641,7 @@ export default function SalesOrderPage({
   useEffect(() => {
     if (!selectedItem) return;
     const timer = window.setTimeout(() => {
+      selectedItemEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       qtyInputRef.current?.focus();
       qtyInputRef.current?.select();
     }, 50);
@@ -935,7 +995,7 @@ export default function SalesOrderPage({
         MobileNo: mappedCustomer?.MobileNo || header.MobileNo || "",
         WhatsappNo: mappedCustomer?.WhatsappNo || header.WhatsappNo || "",
         EmailID: mappedCustomer?.EmailID || header.EmailID || "",
-        GstNo: mappedCustomer?.GstNo || header.GstNo || "",
+        GstNo: customerGstNo(mappedCustomer || header),
       };
       const loadedRows = rows.map((item: any) => ({
         uid: newUid(),
@@ -1165,11 +1225,25 @@ export default function SalesOrderPage({
     focusItemSearch();
   };
 
+  const exitItemSelection = () => {
+    setSelectedItem(null);
+    setEditingCartUid(null);
+    setItemQuery("");
+    setItemSearchResults([]);
+    setReviewAddingItem(false);
+    setShowCart(true);
+    setMessage("");
+  };
+
   const focusItemSearch = () => {
     window.setTimeout(() => {
+      itemSelectRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       itemSelectRef.current?.focus();
       itemSelectRef.current?.select();
     }, 0);
+    window.setTimeout(() => {
+      itemSelectRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 250);
   };
 
   const editCartItem = (item: CartItem) => {
@@ -1306,10 +1380,13 @@ export default function SalesOrderPage({
       </div>
     ) : null;
 
-  const renderEntry = (reviewMode = false) => (
+  const renderEntry = (reviewMode = false) => {
+    const itemEntryMode = !showCart && (!reviewMode || reviewAddingItem);
+
+    return (
     <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
       <section className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
-        <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-3 py-3">
+        <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-3 py-2">
           <div className="min-w-0">
             <div className="truncate text-base font-bold text-blue-950">
             {selectedHeading?.CustomerName}
@@ -1318,10 +1395,26 @@ export default function SalesOrderPage({
               {addressOf(selectedHeading || {})}
             </div>
             {reviewMode && (
-              <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs font-bold text-blue-900">
-                <span>SO No.: {entrySoNumber}</span>
-                <span>SO Date: {displayDateTime(entrySoDate)}</span>
-                <span>Status: {entryStatus}</span>
+              <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-visible text-xs font-bold text-blue-900">
+                <FloatingLabelInput
+                  id="sales-order-number"
+                  label="No."
+                  value={entrySoNumber}
+                  onChange={() => undefined}
+                  disabled
+                  className="h-9 w-[9.5rem] rounded-md border border-blue-200 bg-transparent px-2 py-1 text-xs font-bold text-blue-900 disabled:opacity-100"
+                  labelBgClassName="bg-blue-50"
+                />
+                <FloatingLabelInput
+                  id="sales-order-date"
+                  label="Date"
+                  value={displayDateTime(entrySoDate)}
+                  onChange={() => undefined}
+                  disabled
+                  className="h-9 w-[7.5rem] rounded-md border border-blue-200 bg-transparent px-2 py-1 text-xs font-bold text-blue-900 disabled:opacity-100"
+                  labelBgClassName="bg-blue-50"
+                />
+                <span className="shrink-0 rounded-md border border-blue-200 bg-white px-2 py-2">{entryStatus}</span>
               </div>
             )}
           </div>
@@ -1358,9 +1451,22 @@ export default function SalesOrderPage({
           )}
 
         {showCart ? (
-          <div className="divide-y divide-slate-200">
+          <div className="max-h-[calc(100dvh-23rem)] overflow-y-auto divide-y divide-slate-200 pb-2">
             {cart.length === 0 ? (
-              <div className="p-4 text-sm text-slate-500">No items in cart.</div>
+              <>
+                <div className="p-4 text-sm text-slate-500">No items in cart.</div>
+                {!reviewMode && (
+                  <div className="sticky bottom-0 z-10 bg-white px-3 py-3">
+                    <button
+                      type="button"
+                      onClick={openItemSelection}
+                      className="w-full rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-bold text-blue-700"
+                    >
+                      Add Item
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 {shouldShowCartSearch && (
@@ -1374,7 +1480,7 @@ export default function SalesOrderPage({
                     />
                   </div>
                 )}
-                <div className="max-h-[calc(100vh-23rem)] min-h-0 overflow-y-auto divide-y divide-slate-200">
+                <div className="divide-y divide-slate-200">
                   {filteredCart.length === 0 ? (
                     <div className="p-3 text-sm text-slate-500">No matching items.</div>
                   ) : (
@@ -1433,7 +1539,7 @@ export default function SalesOrderPage({
                   )}
                 </div>
                 {(!reviewMode || canEditSelectedOrder) && (
-                  <div className="px-3 py-3">
+                  <div className="sticky bottom-0 z-10 bg-white px-3 py-3">
                     <button
                       type="button"
                       onClick={openItemSelection}
@@ -1444,17 +1550,6 @@ export default function SalesOrderPage({
                   </div>
                 )}
               </>
-            )}
-            {cart.length === 0 && !reviewMode && (
-              <div className="px-3 py-3">
-                <button
-                  type="button"
-                  onClick={openItemSelection}
-                  className="w-full rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-bold text-blue-700"
-                >
-                  Add Item
-                </button>
-              </div>
             )}
           </div>
         ) : (!reviewMode || (reviewAddingItem && canEditSelectedOrder)) && (
@@ -1590,26 +1685,31 @@ export default function SalesOrderPage({
         </div>
       )}
 
-      <div className="fixed inset-x-0 bottom-16 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+      <div className="fixed inset-x-0 bottom-14 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
         <div
           className={`mx-auto grid max-w-3xl gap-2 ${
-            reviewMode ? (reviewHasChanges ? "grid-cols-3" : canEditSelectedOrder ? "grid-cols-5" : "grid-cols-3") :
+            itemEntryMode ? "grid-cols-2" : reviewMode ? (reviewHasChanges ? "grid-cols-3" : canEditSelectedOrder ? "grid-cols-5" : "grid-cols-3") :
               newOrderSavedId ? "grid-cols-2" : cart.length > 0 ? "grid-cols-4" : "grid-cols-2"
           }`}
         >
-          <label className="col-span-full flex items-center justify-between gap-3 text-xs font-semibold text-slate-700">
-            <span>WhatsApp format</span>
-            <select
-              value={shareFormat}
-              onChange={(event) => updateShareFormat(event.target.value as SalesOrderShareFormat)}
-              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800"
-            >
-              <option value="pdf">PDF with message</option>
-              <option value="image">Image with message</option>
-              <option value="text">SO in text format</option>
-            </select>
-          </label>
-          {reviewMode ? (
+          {itemEntryMode ? (
+            <>
+              <BottomActionButton
+                type="button"
+                onClick={exitItemSelection}
+                label="Back"
+                icon="back"
+                className="border border-blue-300 bg-white text-blue-700"
+              />
+              <BottomActionButton
+                type="button"
+                onClick={exitItemSelection}
+                label="Cancel"
+                icon="cancel"
+                className="border border-slate-300 bg-white text-slate-700"
+              />
+            </>
+          ) : reviewMode ? (
             <>
               {reviewHasChanges && canEditSelectedOrder ? (
                 <>
@@ -1646,13 +1746,11 @@ export default function SalesOrderPage({
                     icon="new"
                     className={`${buttonBase} border border-blue-300 bg-white text-blue-700`}
                   />
-                  <BottomActionButton
-                    type="button"
+                  <PrintActionButton
                     disabled={busy || !selectedOrder?.header?.ID}
-                    onClick={() => void printSelectedOrder()}
-                    label="Print"
-                    icon="print"
-                    className={`${buttonBase} bg-slate-800 text-white`}
+                    format={shareFormat}
+                    onFormatChange={updateShareFormat}
+                    onPrint={() => void printSelectedOrder()}
                   />
                   {canEditSelectedOrder && (
                     <BottomActionButton
@@ -1684,8 +1782,7 @@ export default function SalesOrderPage({
                 </>
               )}
             </>
-          ) : (
-            newOrderSavedId ? (
+          ) : newOrderSavedId ? (
               <>
                 <BottomActionButton
                   type="button"
@@ -1694,13 +1791,11 @@ export default function SalesOrderPage({
                   icon="new"
                   className={`${buttonBase} bg-blue-600 text-white`}
                 />
-                <BottomActionButton
-                  type="button"
+                <PrintActionButton
                   disabled={busy || !newOrderSavedId}
-                  onClick={() => void printSelectedOrder()}
-                  label="Print"
-                  icon="print"
-                  className={`${buttonBase} bg-slate-800 text-white`}
+                  format={shareFormat}
+                  onFormatChange={updateShareFormat}
+                  onPrint={() => void printSelectedOrder()}
                 />
               </>
             ) : cart.length === 0 ? (
@@ -1754,11 +1849,12 @@ export default function SalesOrderPage({
                 />
               </>
             )
-          )}
+          }
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const filteredOrders = useMemo(
     () => orders.map((order) => ({ ...order, Status: statusForMobile(order.Status) })),
@@ -1836,26 +1932,25 @@ export default function SalesOrderPage({
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-blue-200 bg-white pb-20 shadow-sm">
-            <div className="grid grid-cols-[2rem_minmax(0,1fr)_6rem_4.5rem] gap-2 border-b border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold uppercase text-blue-900">
-              <span>#</span><span>Customer</span><span>Date</span><span>Status</span>
-            </div>
+          <div className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
             {filteredOrders.map((order, index) => (
               <button
                 key={order.ID}
                 type="button"
                 onClick={() => void openReviewOrder(order)}
-                className={`grid w-full grid-cols-[2rem_minmax(0,1fr)_6rem_4.5rem] gap-2 border-b border-slate-200 px-3 py-3 text-left text-xs transition last:border-b-0 hover:bg-blue-50 ${
+                className={`block w-full border-b border-slate-200 px-3 py-3 text-left text-sm transition last:border-b-0 hover:bg-blue-50 ${
                   index % 2 === 0 ? "bg-white" : "bg-sky-50/60"
                 }`}
               >
-                <span className="font-bold text-blue-800">{index + 1}</span>
-                <span className="min-w-0">
-                  <span className="block truncate font-bold text-slate-900">{order.CustomerName}</span>
-                  <span className="block truncate text-slate-600">{order.SONumber} · {order.NumItems || 0} items</span>
+                <span className="flex min-w-0 items-center justify-between gap-3">
+                  <span className="min-w-0 truncate font-bold text-slate-900">{order.CustomerName}</span>
+                  <span className="shrink-0 font-bold text-blue-800">{order.NumItems || 0} items</span>
                 </span>
-                <span className="text-slate-700">{displayDateTime(order.SODate)}</span>
-                <span className="font-bold text-slate-700">{order.Status}</span>
+                <span className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2 text-xs text-slate-600">
+                  <span className="min-w-0 truncate">{order.SONumber}</span>
+                  <span className="shrink-0">{displayDateTime(order.SODate)}</span>
+                  <span className="max-w-[6rem] truncate text-right font-bold text-slate-700">{order.Status}</span>
+                </span>
               </button>
             ))}
             {orderStatuses.length > 0 && filteredOrders.length === 0 && (
@@ -1864,14 +1959,14 @@ export default function SalesOrderPage({
               </div>
             )}
           </div>
-          <div className="fixed inset-x-0 bottom-16 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+          <div className="fixed inset-x-0 bottom-14 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
             <div className="mx-auto max-w-3xl">
               <BottomActionButton
                 type="button"
                 onClick={startNewOrderFromReview}
                 label="New"
                 icon="new"
-                className="w-full bg-blue-600 text-white"
+                className="bg-blue-600 text-white"
               />
             </div>
           </div>

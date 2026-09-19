@@ -25,6 +25,13 @@ type Area = {
   customers: Customer[];
 };
 
+const customerGstNo = (customer: Customer) => String(customer.GstNo ?? "");
+
+const normalizeCustomer = (customer: Customer): Customer => ({
+  ...customer,
+  GstNo: customerGstNo(customer).trim(),
+});
+
 const amount = (n: number) =>
   Number(n || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -71,7 +78,13 @@ export default function CustomersPage({
       setMessage("");
       try {
         const res = await API.get("/mobile/customers");
-        setAreas(Array.isArray(res.data?.areas) ? res.data.areas : []);
+        const loadedAreas = Array.isArray(res.data?.areas) ? res.data.areas : [];
+        setAreas(
+          loadedAreas.map((area: Area) => ({
+            ...area,
+            customers: Array.isArray(area.customers) ? area.customers.map(normalizeCustomer) : [],
+          })),
+        );
       } catch (e: any) {
         setMessage(e?.response?.data?.error || "Unable to load customers.");
       } finally {
@@ -135,7 +148,7 @@ export default function CustomersPage({
     setMobile(c.MobileNo ?? "");
     setWhatsapp(c.WhatsappNo ?? "");
     setEmail(c.EmailID ?? "");
-    setGstNo(c.GstNo ?? "");
+    setGstNo(customerGstNo(c));
     setMessage("");
   };
 
