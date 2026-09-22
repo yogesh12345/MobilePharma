@@ -121,7 +121,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   const [purchaseFocusTarget, setPurchaseFocusTarget] =
     useState<PurchaseFocusTarget | null>(null);
   const [customerFocusTarget, setCustomerFocusTarget] =
-    useState<{ id: number; requestKey: number } | null>(null);
+    useState<{ id: number; requestKey: number; customer?: CustomerUpdate } | null>(null);
   const [customerUpdate, setCustomerUpdate] = useState<CustomerUpdate | null>(null);
   const [customerReturnFocusKey, setCustomerReturnFocusKey] = useState(0);
 
@@ -205,8 +205,8 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     setActiveModule(module);
   };
 
-  const openCustomerEditor = (customer: { id: number }) => {
-    setCustomerFocusTarget({ id: customer.id, requestKey: Date.now() });
+  const openCustomerEditor = (customer: CustomerUpdate) => {
+    setCustomerFocusTarget({ id: customer.id, requestKey: Date.now(), customer });
     openModule("customers");
   };
 
@@ -420,6 +420,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
               canUpdateContact={canUpdateCustomerContact}
               focusCustomerId={customerFocusTarget?.id ?? null}
               focusRequestKey={customerFocusTarget?.requestKey ?? 0}
+              focusCustomer={customerFocusTarget?.customer}
               onBackToSalesOrder={returnToSalesOrder}
             />
             </div>

@@ -269,6 +269,15 @@ const toNumber = (value: unknown) => {
 
 const customerGstNo = (row: Partial<Customer>) => String(row.GstNo ?? "");
 
+const customerWhatsappNo = (row: Record<string, unknown> | null | undefined) =>
+  String(
+    row?.SalesInvDefaultWhatsapp ??
+      row?.WhatsappNo ??
+      row?.WhatsAppNo ??
+      row?.WhatsAppNumber ??
+      "",
+  ).trim();
+
 const normalizeCustomer = (row: Customer): Customer => ({
   ...row,
   GstNo: customerGstNo(row).trim(),
@@ -918,7 +927,13 @@ export default function SalesOrderPage({
       });
 
       const createdId = Number(
-        createResponse.data?.id || createResponse.data?.ID || createResponse.data?.header?.ID || 0,
+        createResponse.data?.id ||
+          createResponse.data?.ID ||
+          createResponse.data?.header?.id ||
+          createResponse.data?.header?.ID ||
+          createResponse.data?.order?.id ||
+          createResponse.data?.order?.ID ||
+          0,
       );
       setNewOrderSavedId(createdId > 0 ? createdId : null);
       setSavedCartSignature(createdId > 0 ? cartSignature(cart) : "");
@@ -1031,14 +1046,20 @@ export default function SalesOrderPage({
     try {
       const selectedForPrint = selectedCustomer ?? selectedOrder?.customer;
       let target = String(selectedForPrint?.WhatsappNo || "").trim();
+      if (!target && selectedForPrint?.id) {
+        target = customerWhatsappNo(
+          customers.find((customer) => Number(customer.id) === Number(selectedForPrint.id)) as
+            | unknown as Record<string, unknown> | undefined,
+        );
+      }
       if (selectedForPrint?.id) {
         try {
           const customerResponse = await API.get(`/customers/${selectedForPrint.id}`);
-          target = String(
-            customerResponse.data?.SalesInvDefaultWhatsapp ||
-              customerResponse.data?.WhatsappNo ||
-              target,
-          ).trim();
+          const customerData =
+            customerResponse.data?.customer ??
+            customerResponse.data?.data ??
+            customerResponse.data;
+          target = customerWhatsappNo(customerData) || target;
         } catch {
           // Use the number captured when the customer was selected.
         }
@@ -1116,6 +1137,9 @@ export default function SalesOrderPage({
   };
 
   const selectedHeading = selectedCustomer ?? selectedOrder?.customer;
+  const openSelectedCustomerEditor = () => {
+    if (onEditCustomer && selectedHeading) onEditCustomer(selectedHeading);
+  };
   const entrySoNumber = String(selectedOrder?.header?.SONumber || draftSoNumber || "New");
   const entrySoDate = String(selectedOrder?.header?.SODate || draftSoDate || todayISODate());
   const entryStatus = selectedOrder
@@ -1348,11 +1372,9 @@ export default function SalesOrderPage({
       <section className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
         <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-3 py-2">
           <div
-            className={`min-w-0 ${onEditCustomer ? "cursor-pointer" : ""}`}
-            onDoubleClick={() => {
-              if (onEditCustomer && selectedHeading) onEditCustomer(selectedHeading);
-            }}
-            title={onEditCustomer ? "Double-click to update customer" : undefined}
+            className={`min-w-0 flex-1 ${onEditCustomer ? "cursor-pointer" : ""}`}
+            onDoubleClick={openSelectedCustomerEditor}
+            title={onEditCustomer ? "Double-click the customer header to update customer" : undefined}
           >
             <div className="truncate text-base font-bold text-blue-950">
             {selectedHeading?.CustomerName}
@@ -1388,6 +1410,7 @@ export default function SalesOrderPage({
             <button
               type="button"
               onClick={() => setShowCart((current) => !current)}
+              onDoubleClick={(event) => event.stopPropagation()}
               className={`rounded-full shadow-sm ${
                 showCart ? "bg-blue-100 ring-2 ring-blue-300" : "bg-white"
               }`}

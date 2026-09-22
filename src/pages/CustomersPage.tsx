@@ -29,6 +29,7 @@ const customerGstNo = (customer: Customer) => String(customer.GstNo ?? "");
 
 const normalizeCustomer = (customer: Customer): Customer => ({
   ...customer,
+  id: Number(customer.id),
   GstNo: customerGstNo(customer).trim(),
 });
 
@@ -45,6 +46,7 @@ interface CustomersPageProps {
   canUpdateContact?: boolean;
   focusCustomerId?: number | null;
   focusRequestKey?: number;
+  focusCustomer?: Partial<Customer> & Pick<Customer, "id">;
   onCustomerUpdated?: (customer: Customer) => void;
   onBackToSalesOrder?: (customer?: Customer) => void;
 }
@@ -53,6 +55,7 @@ export default function CustomersPage({
   canUpdateContact = true,
   focusCustomerId: externalFocusCustomerId = null,
   focusRequestKey: externalFocusRequestKey = 0,
+  focusCustomer: externalFocusCustomer,
   onCustomerUpdated,
   onBackToSalesOrder,
 }: CustomersPageProps) {
@@ -159,13 +162,39 @@ export default function CustomersPage({
       externalFocusRequestKey === handledExternalFocusKey.current ||
       selected?.id === externalFocusCustomerId
     ) return;
-    const customer = areas.flatMap((area) => area.customers).find((item) => item.id === externalFocusCustomerId);
-    if (customer) {
+    const customer = areas
+      .flatMap((area) => area.customers)
+      .find((item) => Number(item.id) === Number(externalFocusCustomerId));
+    const fallbackCustomer = externalFocusCustomer
+      ? ({
+          id: Number(externalFocusCustomer.id),
+          AreaCode: "",
+          AreaName: "",
+          CustomerName: String(externalFocusCustomer.CustomerName || ""),
+          AddressLine1: String(externalFocusCustomer.AddressLine1 || ""),
+          AddressLine2: String(externalFocusCustomer.AddressLine2 || ""),
+          AddressLine3: String(externalFocusCustomer.AddressLine3 || ""),
+          MobileNo: String(externalFocusCustomer.MobileNo || ""),
+          WhatsappNo: String(externalFocusCustomer.WhatsappNo || ""),
+          EmailID: String(externalFocusCustomer.EmailID || ""),
+          GstNo: String(externalFocusCustomer.GstNo || ""),
+          CashSales: 0,
+          CreditSales: 0,
+        } satisfies Customer)
+      : null;
+    if (customer || fallbackCustomer) {
       handledExternalFocusKey.current = externalFocusRequestKey;
-      setExpandedArea(`${customer.AreaCode}|${customer.AreaName}`);
-      openCustomer(customer);
+      if (customer) setExpandedArea(`${customer.AreaCode}|${customer.AreaName}`);
+      if (customer) openCustomer(customer);
+      else if (fallbackCustomer) openCustomer(fallbackCustomer);
     }
-  }, [areas, externalFocusCustomerId, externalFocusRequestKey, selected]);
+  }, [
+    areas,
+    externalFocusCustomer,
+    externalFocusCustomerId,
+    externalFocusRequestKey,
+    selected,
+  ]);
 
   const hasChange =
     !!selected &&
