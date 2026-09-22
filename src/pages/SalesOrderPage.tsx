@@ -309,11 +309,11 @@ const salesOrderText = (
     (item, index) =>
       `${index + 1}. ${item.ItemName} – ${item.Packing || "-"} × ${Number(item.Qty1 || 0) + Number(item.Qty2 || 0)}`,
   ),
-  `Order Value: ₹${money(items.reduce((total, item) => total + Number(item.Qty1 || 0) * Number(item.RetRate || 0), 0))}`,
-  "",
-  "*Meena Agencies*",
+  `   Order Value: ₹${money(items.reduce((total, item) => total + Number(item.Qty1 || 0) * Number(item.RetRate || 0), 0))}`,
   "",
   "Thank you for your business. 🙏",
+  "",
+  "*Meena Agencies*",
 ].join("\n");
 
 const isExplicitlyInactive = (value: unknown) => {
