@@ -312,7 +312,9 @@ const salesOrderText = (
   "",
   "Thank you for your business. 🙏",
   "",
-  "Meena Agencies",
+  "*Meena Agencies*",
+  "",
+  `Order Value: ₹${money(items.reduce((total, item) => total + Number(item.Qty1 || 0) * Number(item.RetRate || 0), 0))}`,
 ].join("\n");
 
 const isExplicitlyInactive = (value: unknown) => {
