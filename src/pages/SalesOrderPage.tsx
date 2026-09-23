@@ -289,6 +289,15 @@ const money = (value: number) =>
     maximumFractionDigits: 2,
   });
 
+const orderQuantity = (qty1: number, qty2: number) => {
+  const first = Number(qty1 || 0);
+  const second = Number(qty2 || 0);
+
+  if (first !== 0 && second !== 0) return `(${first}+${second})`;
+  if (second === 0) return String(first);
+  return `(0+${second})`;
+};
+
 const salesOrderShareMessage = [
   "Dear Sir/Madam,",
   "",
@@ -316,7 +325,7 @@ const salesOrderText = (
   "Items:",
   ...items.map(
     (item, index) =>
-      `${index + 1}. ${item.ItemName} – ${item.Packing || "-"} × ${Number(item.Qty1 || 0) + Number(item.Qty2 || 0)}`,
+      `${index + 1}. ${item.ItemName} – ${item.Packing || "-"} x ${orderQuantity(item.Qty1, item.Qty2)}`,
   ),
   `   Order Value: ₹${money(items.reduce((total, item) => total + Number(item.Qty1 || 0) * Number(item.RetRate || 0), 0))}`,
   "",
