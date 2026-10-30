@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 
@@ -37,6 +37,7 @@ type CurrentStock = {
 };
 
 interface CompaniesPageProps {
+  compactTop?: boolean;
   onEditRack?: (item: { id: number; ItemName: string }) => void;
   canUpdateCompany?: boolean;
   canUpdateRack?: boolean;
@@ -80,6 +81,7 @@ const inputClass =
 const STOCK_BATCH_SIZE = 10;
 
 export default function CompaniesPage({
+  compactTop = false,
   onEditRack,
   canUpdateCompany = true,
   canUpdateRack = true,
@@ -88,6 +90,7 @@ export default function CompaniesPage({
 }: CompaniesPageProps) {
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [selected, setSelected] = useState<CompanyDetail | null>(null);
+  const companyListRef = useRef<HTMLElement>(null);
   const [items, setItems] = useState<CompanyItem[]>([]);
   const [currentStock, setCurrentStock] = useState<Record<number, CurrentStock>>(
     {},
@@ -109,6 +112,23 @@ export default function CompaniesPage({
    */
   const stockRequestKeyRef = useRef(0);
   const itemButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+
+  useLayoutEffect(() => {
+    if (!compactTop || selected) return;
+    const updateHeight = () => {
+      const list = companyListRef.current;
+      const footer = document.getElementById("customer-portal-footer");
+      if (!list || !footer) return;
+      list.style.height = `${Math.max(120, Math.floor(footer.getBoundingClientRect().top - list.getBoundingClientRect().top - 8))}px`;
+    };
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    window.visualViewport?.addEventListener("resize", updateHeight);
+    return () => {
+      window.removeEventListener("resize", updateHeight);
+      window.visualViewport?.removeEventListener("resize", updateHeight);
+    };
+  }, [compactTop, selected, loading, message]);
 
   /*
    * When control returns from Update Rack, keep the Company detail/list
@@ -393,7 +413,7 @@ export default function CompaniesPage({
 
   if (selected) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-3 py-4 pb-24 sm:px-4">
+      <div className={`mx-auto w-full max-w-3xl px-3 pb-24 sm:px-4 ${compactTop ? "pt-1" : "pt-4"}`}>
         <button
           type="button"
           onClick={closeCompany}
@@ -594,15 +614,15 @@ export default function CompaniesPage({
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
+    <div className={`mx-auto w-full max-w-3xl px-3 pb-4 sm:px-4 ${compactTop ? "pt-1" : "pt-4"}`}>
       {message && (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {message}
         </div>
       )}
 
-      <section className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_4rem_4.25rem] gap-2 border-b bg-blue-50 px-3 py-2 text-xs font-bold uppercase text-blue-900">
+      <section ref={companyListRef} className="overflow-y-auto rounded-xl border border-blue-200 bg-white shadow-sm">
+        <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_4rem_4.25rem] gap-2 border-b bg-blue-50 px-3 py-2 text-xs font-bold uppercase text-blue-900">
           <span>Company Name</span>
           <span className="text-right">Short</span>
           <span className="text-right">Items</span>

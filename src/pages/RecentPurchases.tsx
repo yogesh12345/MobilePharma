@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import API from "../services/api";
 
 export type PurchaseInvoice = {
@@ -45,10 +45,11 @@ const visibleInvoiceItem = (item: InvoiceItem) =>
   (Number(item.qty || 0) !== 0 || Number(item.free || 0) !== 0);
 const invoiceKey = (invoice: PurchaseInvoice) => `${invoice.invoiceYear}:${invoice.id}`;
 
-export default function RecentPurchases({ invoices, onItemSelect, title = "Recent purchases" }: {
+export default function RecentPurchases({ invoices, onItemSelect, title = "Recent purchases", fillViewport = false }: {
   invoices: PurchaseInvoice[];
   onItemSelect?: (invoice: PurchaseInvoice, item: InvoiceItem) => void;
   title?: string;
+  fillViewport?: boolean;
 }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [itemsByInvoice, setItemsByInvoice] = useState<Record<string, InvoiceItem[]>>({});
@@ -58,6 +59,24 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
   const lastItemTap = useRef<{ key: string; at: number } | null>(null);
   const lastTouchOpen = useRef(0);
   const pendingKeys = useRef(new Set<string>());
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!fillViewport) return;
+    const updateHeight = () => {
+      const list = listRef.current;
+      const footer = document.getElementById("customer-portal-footer");
+      if (!list || !footer) return;
+      list.style.height = `${Math.max(120, Math.floor(footer.getBoundingClientRect().top - list.getBoundingClientRect().top - 8))}px`;
+    };
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    window.visualViewport?.addEventListener("resize", updateHeight);
+    return () => {
+      window.removeEventListener("resize", updateHeight);
+      window.visualViewport?.removeEventListener("resize", updateHeight);
+    };
+  }, [fillViewport]);
 
   const openInvoice = async (invoice: PurchaseInvoice) => {
     const key = invoiceKey(invoice);
@@ -86,9 +105,9 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
         <h2 className="text-xl font-bold">{title}</h2>
         <p className="mt-1 text-sm text-slate-600">Double tap an invoice to view its items.{onItemSelect && " Double tap an item to add it to the claim."} On a keyboard, press Enter.</p>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div ref={listRef} className={`${fillViewport ? "" : "max-h-[min(60vh,32rem)]"} overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm`}>
         <table className="min-w-[670px] w-full border-collapse text-left text-xs sm:text-sm">
-          <thead className="bg-slate-100 text-slate-700">
+          <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
             <tr>
               <th className="whitespace-nowrap px-2 py-2 font-semibold">Invoice Date</th>
               <th className="whitespace-nowrap px-2 py-2 font-semibold">Invoice No.</th>

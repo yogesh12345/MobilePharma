@@ -9,7 +9,7 @@ import type { ProfileForm } from "./profileForm";
 
 const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 
-export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCredentialsChanged }: { onBack: () => void; onUsernameChange?: (name: string) => void; onProfileSaved?: (profile: { status: string; customerId: number | null }) => void; onCredentialsChanged?: () => void }) {
+export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCredentialsChanged }: { onBack: () => void; onUsernameChange?: (name: string) => void; onProfileSaved?: (profile: { status: string; customerId: number | null } & Record<string, unknown>) => void; onCredentialsChanged?: () => void }) {
   const [form, setForm] = useState<ProfileForm>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

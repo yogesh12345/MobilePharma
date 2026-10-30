@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import API from "../services/api";
 import GenericAutoComplete from "../components/GenericAutoComplete";
 import FloatingLabelDecimalInput from "../components/FloatingLabelDecimalInput";
@@ -415,6 +415,7 @@ export type CustomerUpdate = Partial<Customer> & Pick<Customer, "id">;
 
 interface SalesOrderPageProps {
   customerProfileMode?: boolean;
+  onBackToHome?: () => void;
   onEditCustomer?: (customer: Customer) => void;
   customerUpdate?: CustomerUpdate | null;
   customerUpdateFocusRequestKey?: number;
@@ -422,6 +423,7 @@ interface SalesOrderPageProps {
 
 export default function SalesOrderPage({
   customerProfileMode = false,
+  onBackToHome,
   onEditCustomer,
   customerUpdate,
   customerUpdateFocusRequestKey = 0,
@@ -467,9 +469,27 @@ export default function SalesOrderPage({
   const qtyInputRef = useRef<HTMLInputElement | null>(null);
   const freeInputRef = useRef<HTMLInputElement | null>(null);
   const itemDetailRequestRef = useRef(0);
+  const entryCardRef = useRef<HTMLElement>(null);
   const selectedItemId = selectedItem?.id;
 
   const cartCount = cart.length;
+
+  useLayoutEffect(() => {
+    if (!customerProfileMode || (!selectedCustomer && !selectedOrder)) return;
+    const updateHeight = () => {
+      const card = entryCardRef.current;
+      const footer = document.getElementById("sales-order-footer");
+      if (!card || !footer) return;
+      card.style.maxHeight = `${Math.max(120, Math.floor(footer.getBoundingClientRect().top - card.getBoundingClientRect().top - 8))}px`;
+    };
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    window.visualViewport?.addEventListener("resize", updateHeight);
+    return () => {
+      window.removeEventListener("resize", updateHeight);
+      window.visualViewport?.removeEventListener("resize", updateHeight);
+    };
+  }, [customerProfileMode, selectedCustomer, selectedOrder]);
 
   useEffect(() => {
     if (!customerUpdate || customerUpdateFocusRequestKey <= 0) return;
@@ -899,7 +919,7 @@ export default function SalesOrderPage({
     setEditingCartUid(null);
     setQty1(1);
     setQty2(0);
-    setShowCart(itemSourceTab !== "companies");
+    setShowCart(!customerProfileMode && itemSourceTab !== "companies");
     if (itemSourceTab === "companies") setReviewAddingItem(true);
     setMessage("");
   };
@@ -1462,9 +1482,9 @@ export default function SalesOrderPage({
     );
 
     return (
-    <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
-      <section className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
-        <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-3 py-2">
+    <div className={`mx-auto w-full max-w-3xl px-3 pb-4 sm:px-4 ${customerProfileMode ? "pt-1" : "pt-4"}`}>
+      <section ref={entryCardRef} className={`${customerProfileMode ? "overflow-y-auto" : "overflow-hidden"} rounded-xl border border-blue-200 bg-white shadow-sm`}>
+        {!customerProfileMode && <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-3 py-2">
           <div
             className={`min-w-0 flex-1 ${onEditCustomer ? "cursor-pointer" : ""}`}
             onDoubleClick={openSelectedCustomerEditor}
@@ -1500,7 +1520,7 @@ export default function SalesOrderPage({
               </div>
             )}
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
+          {(showCart || (reviewMode && !reviewAddingItem)) && <div className="flex shrink-0 flex-col items-end gap-2">
             <button
               type="button"
               onClick={() => setShowCart((current) => !current)}
@@ -1512,8 +1532,8 @@ export default function SalesOrderPage({
             >
               <CartCountIcon count={cartCount} />
             </button>
-          </div>
-        </div>
+          </div>}
+        </div>}
 
         {showCart ? (
           <div className="max-h-[calc(100dvh-16rem)] overflow-y-auto divide-y divide-slate-200 pb-2">
@@ -1550,55 +1570,58 @@ export default function SalesOrderPage({
                     <div className="p-3 text-sm text-slate-500">No matching items.</div>
                   ) : (
                     filteredCart.map((item, index) => (
-                      <div key={item.uid} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-3 py-3">
+                      <div key={item.uid} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 px-3 py-3">
                         {(!selectedOrder || canEditSelectedOrder) ? (
                           <button
                             type="button"
                             onClick={() => editCartItem(item)}
                             className="min-w-0 text-left"
                           >
-                            <div className="font-semibold text-slate-900">
-                              {index + 1}. {item.ItemName}
-                            </div>
-                            <div className="mt-1 text-xs font-semibold text-slate-600">
-                              {item.Packing} x ({item.Qty1}+{item.Qty2})
+                            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-1">
+                              <span className="font-semibold text-slate-900">{index + 1}.</span>
+                              <span className="font-semibold text-slate-900">{item.ItemName}</span>
+                              <span className="col-start-2 mt-1 text-xs font-semibold text-slate-600">{item.Packing}</span>
                             </div>
                           </button>
                         ) : (
                           <div className="min-w-0 text-left">
-                            <div className="font-semibold text-slate-900">
-                              {index + 1}. {item.ItemName}
-                            </div>
-                            <div className="mt-1 text-xs font-semibold text-slate-600">
-                              {item.Packing} x ({item.Qty1}+{item.Qty2})
+                            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-1">
+                              <span className="font-semibold text-slate-900">{index + 1}.</span>
+                              <span className="font-semibold text-slate-900">{item.ItemName}</span>
+                              <span className="col-start-2 mt-1 text-xs font-semibold text-slate-600">{item.Packing}</span>
                             </div>
                           </div>
                         )}
-                        {(!selectedOrder || canEditSelectedOrder) && (
-                          <button
-                            type="button"
-                            onClick={() => setCart((current) => current.filter((row) => row.uid !== item.uid))}
-                            className="grid h-9 w-9 place-items-center rounded-md border border-red-200 bg-red-50 text-red-700"
-                            aria-label={`Remove ${item.ItemName}`}
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
+                        <div className="flex items-center gap-3">
+                          <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-slate-700" aria-label={`Quantity ${item.Qty1} plus free ${item.Qty2}`}>
+                            ({item.Qty1}+{item.Qty2})
+                          </span>
+                          {(!selectedOrder || canEditSelectedOrder) && (
+                            <button
+                              type="button"
+                              onClick={() => setCart((current) => current.filter((row) => row.uid !== item.uid))}
+                              className="grid h-9 w-9 place-items-center rounded-md border border-red-200 bg-red-50 text-red-700"
+                              aria-label={`Remove ${item.ItemName}`}
                             >
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v5" />
-                              <path d="M14 11v5" />
-                            </svg>
-                          </button>
-                        )}
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v5" />
+                                <path d="M14 11v5" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
@@ -1619,7 +1642,8 @@ export default function SalesOrderPage({
           </div>
         ) : (!reviewMode || (reviewAddingItem && canEditSelectedOrder)) && (
           <div className="border-b border-slate-200 p-3">
-            <div className="mb-3 grid grid-cols-2 rounded-lg border border-blue-200 bg-white p-1">
+            <div className="sticky top-0 z-20 mb-3 flex items-center gap-3 bg-white">
+            <div className="grid min-w-0 w-full max-w-[26rem] grid-cols-2 rounded-lg border border-blue-200 bg-white p-1">
               <button
                 type="button"
                 onClick={() => {
@@ -1646,6 +1670,15 @@ export default function SalesOrderPage({
               >
                 From Companies
               </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCart(true)}
+              className="ml-auto shrink-0 rounded-full bg-white shadow-sm"
+              aria-label="Show cart items"
+            >
+              <CartCountIcon count={cartCount} />
+            </button>
             </div>
 
             {renderSelectedItemEditor(reviewMode)}
@@ -1742,7 +1775,7 @@ export default function SalesOrderPage({
         </div>
       )}
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+      <div id="sales-order-footer" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
         <div
           className={`mx-auto grid max-w-3xl gap-2 ${
             itemEntryMode || customerProfileMode ? "grid-cols-2" : reviewMode ? (reviewHasChanges ? "grid-cols-3" : canEditSelectedOrder ? "grid-cols-5" : "grid-cols-3") :
@@ -1768,7 +1801,7 @@ export default function SalesOrderPage({
             </>
           ) : customerProfileMode ? (
             <>
-              <BottomActionButton type="button" onClick={resetEntry} label={newOrderSavedId ? "New" : "Cancel"} icon={newOrderSavedId ? "new" : "cancel"} className={`${buttonBase} border border-blue-300 bg-white text-blue-700`} />
+              <BottomActionButton type="button" onClick={onBackToHome ?? resetEntry} label="Back" icon="back" className={`${buttonBase} border border-blue-300 bg-white text-blue-700`} />
               {!newOrderSavedId && <BottomActionButton type="button" disabled={busy || cart.length === 0} onClick={() => void saveOrder("submit")} label="Send" icon="submit" className={`${buttonBase} bg-emerald-600 text-white`} />}
             </>
           ) : reviewMode ? (

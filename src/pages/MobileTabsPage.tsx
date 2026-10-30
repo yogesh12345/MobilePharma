@@ -13,6 +13,7 @@ import CustomersPage from "./CustomersPage";
 import SalesOrderPage, { type CustomerUpdate } from "./SalesOrderPage";
 import Profile from "./Profile";
 import CustomerPortalPage from "./CustomerPortalPage";
+import { customerIdentityFromProfile, type CustomerIdentity } from "./profileForm";
 
 interface MobileTabsPageProps {
   onLogout: () => void;
@@ -119,6 +120,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   const [userName, setUserName] = useState(() => displayUserName(initialUserName));
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [hasCustomerProfile, setHasCustomerProfile] = useState(false);
+  const [customerIdentity, setCustomerIdentity] = useState<CustomerIdentity | null>(null);
   const [linkedCustomer, setLinkedCustomer] = useState(false);
   const [isEmployee, setIsEmployee] = useState(false);
   const [employeeLoaded, setEmployeeLoaded] = useState(false);
@@ -148,6 +150,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     void API.get("/mobile/profile").then(({ data }) => {
       if (disposed) return;
       setHasCustomerProfile(Boolean(data.profile));
+      setCustomerIdentity(customerIdentityFromProfile(data.profile));
       setLinkedCustomer(data.profile?.status === "LINKED" && Boolean(data.profile?.customerId));
     }).catch(() => undefined).finally(() => { if (!disposed) setProfileLoaded(true); });
     return () => { disposed = true; };
@@ -220,6 +223,14 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
       ? activeModule
       : null;
   const customerExperience = profileLoaded && employeeLoaded && (hasCustomerProfile || !isEmployee);
+  const showCustomerHeader = customerExperience && !profileOpen && customerIdentity;
+  const customerLocality = customerIdentity
+    ? [customerIdentity.city, customerIdentity.district, customerIdentity.state, customerIdentity.pin]
+        .filter(Boolean).join(", ")
+    : "";
+  const customerAddressLine2 = customerIdentity
+    ? [customerIdentity.addressLine2, customerLocality].filter(Boolean).join(" · ")
+    : "";
 
   const openModule = (module: MobileModule) => {
     if (!hasModuleAccess(module)) return;
@@ -305,9 +316,18 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     <main className="min-h-dvh bg-gray-100 pb-4 text-gray-800">
       <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex min-h-[61px] w-full max-w-3xl items-center justify-between gap-3 px-3 py-2 sm:px-4">
-          <div>
+          {showCustomerHeader ? (
+            <div className="relative min-w-0 flex-1 overflow-hidden py-0.5" aria-label="Customer identity">
+              <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center whitespace-nowrap text-4xl font-black tracking-wide text-blue-900/10 sm:text-5xl">PharmaSys</span>
+              <div className="relative break-words text-blue-950">
+                <h1 className="text-base font-bold leading-snug sm:text-lg">{customerIdentity.customerName}</h1>
+                <p className="text-xs leading-snug">{customerIdentity.addressLine1}</p>
+                {customerAddressLine2 && <p className="text-xs leading-snug">{customerAddressLine2}</p>}
+              </div>
+            </div>
+          ) : (
             <h1 className="text-lg font-bold text-blue-900">PharmaSys</h1>
-          </div>
+          )}
 
           {(selectedModule || profileOpen) && (
             <div className="truncate text-sm font-bold text-blue-900">
@@ -322,13 +342,12 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
             <button
               type="button"
               onClick={() => setMenuOpen((open) => !open)}
-              className="inline-flex min-h-10 items-center gap-2 rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-900 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md text-blue-900 transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-200"
               aria-label="Open menu"
               aria-expanded={menuOpen}
               aria-haspopup="menu"
             >
               <MenuIcon />
-              <span className="hidden sm:inline">Menu</span>
             </button>
 
             {menuOpen && (
@@ -383,7 +402,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
       </header>
 
       {profileOpen ? (
-        <Profile onBack={() => setProfileOpen(false)} onCredentialsChanged={onLogout} onUsernameChange={(name) => setUserName(displayUserName(name))} onProfileSaved={(profile) => { setActiveModule(null); setHasCustomerProfile(true); setLinkedCustomer(profile.status === "LINKED" && Boolean(profile.customerId)); }} />
+        <Profile onBack={() => setProfileOpen(false)} onCredentialsChanged={onLogout} onUsernameChange={(name) => setUserName(displayUserName(name))} onProfileSaved={(profile) => { setActiveModule(null); setHasCustomerProfile(true); setCustomerIdentity(customerIdentityFromProfile(profile)); setLinkedCustomer(profile.status === "LINKED" && Boolean(profile.customerId)); }} />
       ) : !profileLoaded || !employeeLoaded ? (
         <div className="mx-auto max-w-3xl px-4 py-5 text-sm text-slate-600">Checking customer profile...</div>
       ) : customerExperience ? (
