@@ -1,4 +1,4 @@
-const CACHE_NAME = "pharmasys-pwa-v2";
+const CACHE_NAME = "pharmasys-pwa-v3";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -29,7 +29,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
+            .filter((key) => key.startsWith("pharmasys-pwa-") && key !== CACHE_NAME)
             .map((key) => caches.delete(key)),
         ),
       )
@@ -47,11 +47,15 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          if (response.ok && response.headers.get("content-type")?.includes("text/html")) {
+            const copy = response.clone();
+            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)));
+          }
           return response;
         })
-        .catch(() => caches.match(request).then((cached) => cached ?? caches.match(resolveUrl("./index.html")))),
+        .catch(() =>
+          caches.match(request).then((cached) => cached ?? caches.match(resolveUrl("./index.html"))),
+        ),
     );
     return;
   }

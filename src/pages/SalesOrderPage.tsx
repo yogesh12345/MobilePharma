@@ -414,12 +414,14 @@ const CartCountIcon = ({ count, compact = false }: { count: number; compact?: bo
 export type CustomerUpdate = Partial<Customer> & Pick<Customer, "id">;
 
 interface SalesOrderPageProps {
+  customerProfileMode?: boolean;
   onEditCustomer?: (customer: Customer) => void;
   customerUpdate?: CustomerUpdate | null;
   customerUpdateFocusRequestKey?: number;
 }
 
 export default function SalesOrderPage({
+  customerProfileMode = false,
   onEditCustomer,
   customerUpdate,
   customerUpdateFocusRequestKey = 0,
@@ -479,6 +481,7 @@ export default function SalesOrderPage({
   }, [customerUpdate, customerUpdateFocusRequestKey]);
 
   const loadCustomers = async () => {
+    if (customerProfileMode) return;
     setLoading(true);
     setMessage("");
     try {
@@ -548,16 +551,31 @@ export default function SalesOrderPage({
   };
 
   useEffect(() => {
+    if (customerProfileMode) {
+      setLoading(true);
+      void API.get("/mobile/customer-portal/customer")
+        .then(({ data }) => {
+          const customer = data.customer as Customer;
+          if (!customer?.id) throw new Error("Linked customer is unavailable");
+          setSelectedCustomer(normalizeCustomer(customer));
+          setCustomers([normalizeCustomer(customer)]);
+        })
+        .catch((error) => setMessage(error?.response?.data?.error ?? "Unable to load your linked customer profile."))
+        .finally(() => setLoading(false));
+      return;
+    }
     void loadCustomers();
   }, []);
 
   useEffect(() => {
+    if (customerProfileMode) return;
     if (activeTab === "review" && !selectedOrder) void loadOrders();
     if (activeTab === "place" && !selectedCustomer) void loadCustomers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   useEffect(() => {
+    if (customerProfileMode) return;
     if (activeTab !== "place" || selectedCustomer || loading) return;
     const timer = window.setTimeout(() => {
       customerSelectRef.current?.focus();
@@ -648,7 +666,7 @@ export default function SalesOrderPage({
   }, [selectedItem]);
 
   const resetEntry = () => {
-    setSelectedCustomer(null);
+    if (!customerProfileMode) setSelectedCustomer(null);
     setSelectedOrder(null);
     setCart([]);
     setLoadedCartSignature("");
@@ -883,7 +901,25 @@ export default function SalesOrderPage({
     if (selectedOrder && !canEditSelectedOrder) return;
     const customer = selectedCustomer ?? selectedOrder?.customer;
     if (!customer || cart.length === 0) {
-      setMessage("Select a customer and add at least one item.");
+      setMessage(customerProfileMode ? "Add at least one item." : "Select a customer and add at least one item.");
+      return;
+    }
+
+    if (customerProfileMode) {
+      setBusy(true);
+      setMessage("");
+      try {
+        const { data } = await API.post("/mobile/customer-portal/orders", {
+          items: cart.map((item) => ({ itemId: item.id, quantity: item.Qty1, freeQuantity: item.Qty2 })),
+          remark: "Mobile customer order",
+        });
+        setNewOrderSavedId(Number(data.id) || null);
+        setSavedCartSignature(cartSignature(cart));
+        setShowCart(true);
+        setMessage(`Order ${data.soNumber ?? ""} submitted for your linked customer profile.`);
+      } catch (error: any) {
+        setMessage(error?.response?.data?.error || "Unable to submit sales order.");
+      } finally { setBusy(false); }
       return;
     }
 
@@ -1160,7 +1196,7 @@ export default function SalesOrderPage({
     Boolean(selectedOrder) && loadedCartSignature !== "" && cartSignature(cart) !== loadedCartSignature;
   const printableStatuses = new Set(["SAVED", "SUBMITTED", "CANCELLED", "CANCELED"]);
   const printStatus = normalizedStatus(selectedOrderStatus || (newOrderSavedId ? "SAVED" : ""));
-  const printReady = printableStatuses.has(printStatus) &&
+  const printReady = !customerProfileMode && printableStatuses.has(printStatus) &&
     (selectedOrder
       ? showCart && !reviewHasChanges && !selectedItem
       : Boolean(newOrderSavedId && savedCartSignature && cartSignature(cart) === savedCartSignature && showCart && !selectedItem));
@@ -1660,7 +1696,7 @@ export default function SalesOrderPage({
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
         <div
           className={`mx-auto grid max-w-3xl gap-2 ${
-            itemEntryMode ? "grid-cols-2" : reviewMode ? (reviewHasChanges ? "grid-cols-3" : canEditSelectedOrder ? "grid-cols-5" : "grid-cols-3") :
+            itemEntryMode || customerProfileMode ? "grid-cols-2" : reviewMode ? (reviewHasChanges ? "grid-cols-3" : canEditSelectedOrder ? "grid-cols-5" : "grid-cols-3") :
               newOrderSavedId ? "grid-cols-2" : cart.length > 0 ? "grid-cols-4" : "grid-cols-2"
           }`}
         >
@@ -1680,6 +1716,11 @@ export default function SalesOrderPage({
                 icon="cancel"
                 className="border border-slate-300 bg-white text-slate-700"
               />
+            </>
+          ) : customerProfileMode ? (
+            <>
+              <BottomActionButton type="button" onClick={resetEntry} label={newOrderSavedId ? "New" : "Cancel"} icon={newOrderSavedId ? "new" : "cancel"} className={`${buttonBase} border border-blue-300 bg-white text-blue-700`} />
+              {!newOrderSavedId && <BottomActionButton type="button" disabled={busy || cart.length === 0} onClick={() => void saveOrder("submit")} label="Send" icon="submit" className={`${buttonBase} bg-emerald-600 text-white`} />}
             </>
           ) : reviewMode ? (
             <>
@@ -1831,6 +1872,7 @@ export default function SalesOrderPage({
 
   if (selectedCustomer && !selectedOrder) return renderEntry(false);
   if (selectedOrder) return renderEntry(true);
+  if (customerProfileMode) return <div className="mx-auto max-w-3xl px-4 py-5 text-sm text-slate-700">{loading ? "Loading your linked customer profile..." : message || "Customer profile is not linked."}</div>;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">

@@ -4,6 +4,22 @@ export function registerServiceWorker() {
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1"
   ) {
+    // Preview builds can inherit a worker from an older local build. Remove it
+    // so the next navigation loads the current files from the preview server.
+    void navigator.serviceWorker.getRegistrations().then((registrations) =>
+      Promise.all(
+        registrations
+          .filter((registration) => registration.scope.startsWith(`${window.location.origin}${import.meta.env.BASE_URL}`))
+          .map((registration) => registration.unregister()),
+      ),
+    );
+    if ("caches" in window) {
+      void caches.keys().then((keys) =>
+        Promise.all(
+          keys.filter((key) => key.startsWith("pharmasys-pwa-")).map((key) => caches.delete(key)),
+        ),
+      );
+    }
     return;
   }
 

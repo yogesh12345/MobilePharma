@@ -9,6 +9,9 @@ interface FloatingLabelInputProps {
   required?: boolean;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   maxLength?: number;
+  pattern?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void;
   onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; // supported
@@ -43,6 +46,9 @@ const FloatingLabelInput = forwardRef<
       required,
       inputMode,
       maxLength,
+      pattern,
+      "aria-invalid": ariaInvalid,
+      "aria-describedby": ariaDescribedBy,
       onChange,
       onFocus,
       onBlur,
@@ -80,6 +86,9 @@ const FloatingLabelInput = forwardRef<
           required={required}
           inputMode={inputMode}
           maxLength={maxLength}
+          pattern={pattern}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           value={value}
           onChange={onChange}
           onFocus={onFocus}

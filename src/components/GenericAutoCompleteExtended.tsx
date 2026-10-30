@@ -39,6 +39,9 @@ type ExtraProps = {
   onDetailsVisibleChange?: (visible: boolean) => void; // N
 };
 
+const buildDefaultInfoLines = (item: AutoCompleteItem) =>
+  [item.label2, item.label3, item.label4, item.label5].filter(Boolean) as string[];
+
 export type GenericAutoCompleteExtendedProps = Omit<BaseProps, "onSelect"> &
   ExtraProps & {
     /** onSelect from parent still receives the selected item */
@@ -68,6 +71,7 @@ const GenericAutoCompleteExtended = forwardRef<
   ) => {
     const [selected, setSelected] = useState<AutoCompleteItem | null>(null);
     const [lockedInfo, setLockedInfo] = useState<string>("");
+    const prevVisibleRef = useRef(false);
 
     // Expose the inner input ref without causing render loops
     const innerRefEl = useRef<HTMLInputElement | null>(null);
@@ -76,14 +80,8 @@ const GenericAutoCompleteExtended = forwardRef<
     }, []);
     useImperativeHandle(ref, () => innerRefEl.current as HTMLInputElement);
 
-    // Default info builder: label2..label5 as lines (e.g., Address lines)
-    const defaultBuilder = (item: AutoCompleteItem) =>
-      [item.label2, item.label3, item.label4, item.label5].filter(
-        Boolean
-      ) as string[];
-
     const infoText = useMemo(() => {
-      const src = selected ? (buildInfoLines ?? defaultBuilder)(selected) : [];
+      const src = selected ? (buildInfoLines ?? buildDefaultInfoLines)(selected) : [];
       const lines = src.slice(0, maxLines);
       return lines.join("\n").trim();
     }, [selected, buildInfoLines, maxLines]);
@@ -102,20 +100,25 @@ const GenericAutoCompleteExtended = forwardRef<
         setSelected(null);
         setLockedInfo("");
       }
-    }, [searchQuery, persistAfterSelectionEdit]);
+    }, [searchQuery, persistAfterSelectionEdit, selected]);
 
-    const handleSelect = (item: AutoCompleteItem) => {
+    const handleSelect = useCallback((item: AutoCompleteItem) => {
       setSelected(item);
       onSelect(item); // still inform parent
-    };
+    }, [onSelect]);
 
     // compute internal text from selection as before...
-    const textFromSelection = (
-      persistAfterSelectionEdit ? lockedInfo || infoText : infoText
-    ).trim();
+    const textFromSelection = useMemo(
+      () =>
+        (persistAfterSelectionEdit ? lockedInfo || infoText : infoText).trim(),
+      [infoText, lockedInfo, persistAfterSelectionEdit],
+    );
 
     // parent wins if provided
-    const parentDetails = String(detailsText ?? "").trim();
+    const parentDetails = useMemo(
+      () => String(detailsText ?? "").trim(),
+      [detailsText],
+    );
 
     // ⬇ final text preferred order: parent-controlled > internal computed
     // const textToShow = String(detailsText ?? "").trim() || textFromSelection;
@@ -124,25 +127,30 @@ const GenericAutoCompleteExtended = forwardRef<
     //     ).trim();
 
     // FINAL text to show
-    const textToShow = parentDetails || textFromSelection;
+    const textToShow = useMemo(
+      () => parentDetails || textFromSelection,
+      [parentDetails, textFromSelection],
+    );
 
     // NEW: only show when input has text
     const hasQuery = (searchQuery ?? "").trim().length > 0;
 
     const visible = hasQuery && textToShow !== "";
-    const [prevVisible, setPrevVisible] = useState(false);
 
     useEffect(() => {
-      if (visible !== prevVisible) {
-        setPrevVisible(visible);
+      if (visible !== prevVisibleRef.current) {
+        prevVisibleRef.current = visible;
         onDetailsVisibleChange?.(visible);
       }
-    }, [visible, prevVisible, onDetailsVisibleChange]);
+    }, [visible, onDetailsVisibleChange]);
 
-    const rows =
-      textToShow.length === 0
-        ? 1
-        : Math.max(1, Math.min(maxLines, textToShow.split(/\r?\n/).length));
+    const rows = useMemo(
+      () =>
+        textToShow.length === 0
+          ? 1
+          : Math.max(1, Math.min(maxLines, textToShow.split(/\r?\n/).length)),
+      [maxLines, textToShow],
+    );
     const hasTopLabel =
       !rest.hideFloatingLabel &&
       String(rest.topLabel ?? "Search Entry").trim().length > 0;
