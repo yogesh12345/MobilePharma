@@ -12,12 +12,17 @@ export type PurchaseInvoice = {
   status: string;
 };
 
-type InvoiceItem = {
+export type InvoiceItem = {
+  saleDetailId: number;
+  saleLocation: number;
+  itemId: number;
+  batSrNo: number;
   itemName: string;
   packing: string;
   qty: number;
   free: number;
   mrp: number;
+  retailRate: number;
   batchNo: string;
   expiry: string;
   gstPercent: number;
@@ -40,12 +45,17 @@ const visibleInvoiceItem = (item: InvoiceItem) =>
   (Number(item.qty || 0) !== 0 || Number(item.free || 0) !== 0);
 const invoiceKey = (invoice: PurchaseInvoice) => `${invoice.invoiceYear}:${invoice.id}`;
 
-export default function RecentPurchases({ invoices }: { invoices: PurchaseInvoice[] }) {
+export default function RecentPurchases({ invoices, onItemSelect, title = "Recent purchases" }: {
+  invoices: PurchaseInvoice[];
+  onItemSelect?: (invoice: PurchaseInvoice, item: InvoiceItem) => void;
+  title?: string;
+}) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [itemsByInvoice, setItemsByInvoice] = useState<Record<string, InvoiceItem[]>>({});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [detailError, setDetailError] = useState("");
   const lastTap = useRef<{ key: string; at: number } | null>(null);
+  const lastItemTap = useRef<{ key: string; at: number } | null>(null);
   const lastTouchOpen = useRef(0);
   const pendingKeys = useRef(new Set<string>());
 
@@ -73,8 +83,8 @@ export default function RecentPurchases({ invoices }: { invoices: PurchaseInvoic
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-xl font-bold">Recent purchases</h2>
-        <p className="mt-1 text-sm text-slate-600">Double tap an invoice to view its items. On a keyboard, press Enter.</p>
+        <h2 className="text-xl font-bold">{title}</h2>
+        <p className="mt-1 text-sm text-slate-600">Double tap an invoice to view its items.{onItemSelect && " Double tap an item to add it to the claim."} On a keyboard, press Enter.</p>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-[670px] w-full border-collapse text-left text-xs sm:text-sm">
@@ -93,7 +103,7 @@ export default function RecentPurchases({ invoices }: { invoices: PurchaseInvoic
               const key = invoiceKey(invoice);
               const expanded = selectedKey === key;
               const items = itemsByInvoice[key];
-              const visibleItems = items?.filter(visibleInvoiceItem);
+              const visibleItems = items?.filter(onItemSelect ? item => Number(item.qty || 0) + Number(item.free || 0) > 0 : visibleInvoiceItem);
               return (
                 <Fragment key={key}>
                   <tr
@@ -142,23 +152,38 @@ export default function RecentPurchases({ invoices }: { invoices: PurchaseInvoic
                             <table className="min-w-[710px] w-full text-left text-[11px]">
                               <thead className="bg-slate-100 text-slate-700">
                                 <tr>
-                                  {["Item Name", "Packing", "Qty+Free", "MRP", "Batch No.", "Expiry", "GST%", "Value"].map((heading) => (
-                                    <th key={heading} className={`whitespace-nowrap px-2 py-1.5 text-xs font-semibold ${["Qty+Free", "MRP", "GST%", "Value"].includes(heading) ? "text-right" : "text-left"}`}>{heading}</th>
+                                  {["Item Name", "Packing", "Qty+Free", "MRP", ...(onItemSelect ? ["Retail"] : []), "Batch No.", "Expiry", "GST%", "Value"].map((heading) => (
+                                    <th key={heading} className={`whitespace-nowrap px-2 py-1.5 text-xs font-semibold ${["Qty+Free", "MRP", "Retail", "GST%", "Value"].includes(heading) ? "text-right" : "text-left"}`}>{heading}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody>
-                                {visibleItems?.map((item, index) => <tr key={index} className="border-t border-slate-100">
+                                {visibleItems?.map((item, index) => <tr key={`${item.saleDetailId}:${item.saleLocation}:${index}`}
+                                  tabIndex={onItemSelect ? 0 : undefined}
+                                  aria-label={onItemSelect ? `${item.itemName}, batch ${item.batchNo}, double tap to add to claim` : undefined}
+                                  className={`border-t border-slate-100 ${onItemSelect ? "cursor-pointer hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500" : ""}`}
+                                  style={onItemSelect ? { touchAction: "manipulation" } : undefined}
+                                  onDoubleClick={() => { if (onItemSelect && Date.now() - lastTouchOpen.current > 500) onItemSelect(invoice, item); }}
+                                  onTouchEnd={onItemSelect ? event => {
+                                    const itemKey = `${key}:${item.saleDetailId}:${item.saleLocation}:${index}`;
+                                    const now = Date.now();
+                                    if (lastItemTap.current?.key === itemKey && now - lastItemTap.current.at < 400) {
+                                      event.preventDefault(); lastItemTap.current = null; lastTouchOpen.current = now; onItemSelect(invoice, item);
+                                    } else lastItemTap.current = { key: itemKey, at: now };
+                                  } : undefined}
+                                  onKeyDown={onItemSelect ? event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onItemSelect(invoice, item); } } : undefined}
+                                >
                                   <td className="min-w-36 max-w-48 px-2 py-1.5 text-xs">{item.itemName || "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-xs">{item.packing || "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right">{quantityWithFree(item.qty, item.free)}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right">{money(item.mrp)}</td>
+                                  {onItemSelect && <td className="whitespace-nowrap px-2 py-1.5 text-right">{money(item.retailRate)}</td>}
                                   <td className="whitespace-nowrap px-2 py-1.5">{item.batchNo || "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5">{item.expiry || "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right">{Number(item.gstPercent || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right">{money(item.value)}</td>
                                 </tr>)}
-                                {visibleItems?.length === 0 && <tr><td colSpan={8} className="px-2 py-3 text-slate-600">No billable items found for this invoice.</td></tr>}
+                                {visibleItems?.length === 0 && <tr><td colSpan={onItemSelect ? 9 : 8} className="px-2 py-3 text-slate-600">No items found for this invoice.</td></tr>}
                               </tbody>
                             </table>
                           </div>

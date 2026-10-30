@@ -114,6 +114,10 @@ const FloatingLabelDecimalInput = forwardRef<
         return false;
       }
 
+      if (fractionalDigits === 0 && nextValue.includes(".")) {
+        return false;
+      }
+
       // enforce fractional digit cap when configured
       if (fractionalDigits !== undefined) {
         const decimalPoint = nextValue.indexOf(".");
@@ -170,7 +174,7 @@ const FloatingLabelDecimalInput = forwardRef<
         <input
           id={id}
           type="text"
-          inputMode="decimal"
+          inputMode={fractionalDigits === 0 ? "numeric" : "decimal"}
           disabled={disabled}
           placeholder={placeholder}
           autoComplete={autoComplete}
@@ -204,6 +208,7 @@ const FloatingLabelDecimalInput = forwardRef<
           }}
           onChange={(e) => {
             const raw = e.target.value;
+            if (!isValidNextValue(raw)) return;
             setText(raw);
 
             const num = parseFloat(raw);

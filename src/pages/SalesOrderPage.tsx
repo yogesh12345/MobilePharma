@@ -437,6 +437,7 @@ export default function SalesOrderPage({
   const [cartSearch, setCartSearch] = useState("");
   const [itemQuery, setItemQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<ItemInfo | null>(null);
+  const [loadingSelectedItem, setLoadingSelectedItem] = useState(false);
   const [editingCartUid, setEditingCartUid] = useState<string | null>(null);
   const [itemSourceTab, setItemSourceTab] = useState<"search" | "companies">("search");
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
@@ -465,6 +466,8 @@ export default function SalesOrderPage({
   const itemSelectRef = useRef<HTMLInputElement | null>(null);
   const qtyInputRef = useRef<HTMLInputElement | null>(null);
   const freeInputRef = useRef<HTMLInputElement | null>(null);
+  const itemDetailRequestRef = useRef(0);
+  const selectedItemId = selectedItem?.id;
 
   const cartCount = cart.length;
 
@@ -624,7 +627,7 @@ export default function SalesOrderPage({
   }, [itemSourceTab, selectedCustomer, selectedOrder]);
 
   useEffect(() => {
-    if (!selectedItem) return;
+    if (selectedItemId == null) return;
     const keepEditorVisible = () => {
       const editor = selectedItemEditorRef.current;
       if (!editor) return;
@@ -663,9 +666,11 @@ export default function SalesOrderPage({
       window.clearTimeout(focusTimer);
       viewport?.removeEventListener("resize", handleViewportResize);
     };
-  }, [selectedItem]);
+  }, [selectedItemId]);
 
   const resetEntry = () => {
+    ++itemDetailRequestRef.current;
+    setLoadingSelectedItem(false);
     if (!customerProfileMode) setSelectedCustomer(null);
     setSelectedOrder(null);
     setCart([]);
@@ -690,6 +695,8 @@ export default function SalesOrderPage({
   };
 
   const openCustomerOrder = (customer: Customer) => {
+    ++itemDetailRequestRef.current;
+    setLoadingSelectedItem(false);
     setSelectedCustomer(customer);
     setSelectedOrder(null);
     setCart([]);
@@ -739,26 +746,56 @@ export default function SalesOrderPage({
     });
   };
 
-  const handleItemSelect = async (item: { id: number | string; label1: string }) => {
+  const handleItemSelect = async (item: { id: number | string; label1: string; label2?: string; item?: unknown }) => {
+    const detailFromSearch = item.item as ItemInfo | undefined;
+    if (detailFromSearch && Number(detailFromSearch.id) === Number(item.id) && detailFromSearch.ItemName) {
+      selectItemInfo(detailFromSearch);
+      return;
+    }
+    const requestId = ++itemDetailRequestRef.current;
     setMessage("");
     setItemQuery("");
+    setSelectedItem({
+      id: Number(item.id),
+      ItemName: item.label1,
+      Packing: item.label2 || "",
+      CompanyID: 0,
+      CompShort: "",
+      HSNCode: "",
+      Location: "",
+      RackNumber: "",
+      MRP: 0,
+      RetRate: 0,
+      GSTPercent: 0,
+      Scheme: "",
+      SchmQty: 0,
+      SchmFree: 0,
+      StockQty1: 0,
+      StockQty2: 0,
+      StockAvailable: false,
+    });
+    setLoadingSelectedItem(true);
+    setEditingCartUid(null);
+    setShowCart(false);
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLInputElement) activeElement.blur();
     try {
-      setSelectedItem(await loadItemDetail(item.id));
-      setEditingCartUid(null);
-      setShowCart(false);
-      const activeElement = document.activeElement;
-      if (activeElement instanceof HTMLInputElement) activeElement.blur();
-      window.setTimeout(() => {
-        selectedItemEditorRef.current?.scrollIntoView({ block: "nearest" });
-        qtyInputRef.current?.focus();
-        qtyInputRef.current?.select();
-      }, 0);
+      const detail = await loadItemDetail(item.id);
+      if (requestId !== itemDetailRequestRef.current) return;
+      if (!detail) throw new Error("Item details are unavailable.");
+      setSelectedItem(detail);
     } catch {
+      if (requestId !== itemDetailRequestRef.current) return;
       setSelectedItem(null);
+      setMessage("Unable to load item details. Please select the item again.");
+    } finally {
+      if (requestId === itemDetailRequestRef.current) setLoadingSelectedItem(false);
     }
   };
 
   const selectItemInfo = (item: ItemInfo) => {
+    ++itemDetailRequestRef.current;
+    setLoadingSelectedItem(false);
     setSelectedItem(item);
     setEditingCartUid(null);
     setItemQuery("");
@@ -810,6 +847,7 @@ export default function SalesOrderPage({
 
   const registerSelectedItem = () => {
     if (selectedOrder && !canEditSOStatus(selectedOrder.header?.Status)) return;
+    if (loadingSelectedItem) return;
     if (!selectedItem) {
       setMessage("Select an item first.");
       return;
@@ -1219,6 +1257,8 @@ export default function SalesOrderPage({
 
   const backFromEntry = (reviewMode: boolean) => {
     if (reviewMode) {
+      ++itemDetailRequestRef.current;
+      setLoadingSelectedItem(false);
       setSelectedOrder(null);
       setSelectedCustomer(null);
       setCart([]);
@@ -1250,6 +1290,8 @@ export default function SalesOrderPage({
 
   const openItemSelection = () => {
     if (selectedOrder && !canEditSelectedOrder) return;
+    ++itemDetailRequestRef.current;
+    setLoadingSelectedItem(false);
     setShowCart(false);
     setReviewAddingItem(true);
     setSelectedItem(null);
@@ -1262,6 +1304,8 @@ export default function SalesOrderPage({
   };
 
   const exitItemSelection = () => {
+    ++itemDetailRequestRef.current;
+    setLoadingSelectedItem(false);
     setSelectedItem(null);
     setEditingCartUid(null);
     setItemQuery("");
@@ -1283,6 +1327,8 @@ export default function SalesOrderPage({
 
   const editCartItem = (item: CartItem) => {
     if (selectedOrder && !canEditSelectedOrder) return;
+    ++itemDetailRequestRef.current;
+    setLoadingSelectedItem(false);
     setSelectedItem(item);
     setEditingCartUid(item.uid);
     setQty1(Number(item.Qty1 || 0));
@@ -1328,11 +1374,11 @@ export default function SalesOrderPage({
         </div>
 
         <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold text-slate-700">
-          <span>Company: {selectedItem.CompShort || "-"}</span>
-          <span>Location: {selectedItem.Location || "-"}</span>
-          <span>Rack: {selectedItem.RackNumber || "-"}</span>
-          <span>MRP: {money(selectedItem.MRP)}</span>
-          <span>Scheme: {selectedItem.Scheme || "-"}</span>
+          <span>Company: {loadingSelectedItem ? "..." : selectedItem.CompShort || "-"}</span>
+          <span>Location: {loadingSelectedItem ? "..." : selectedItem.Location || "-"}</span>
+          <span>Rack: {loadingSelectedItem ? "..." : selectedItem.RackNumber || "-"}</span>
+          <span>MRP: {loadingSelectedItem ? "..." : money(selectedItem.MRP)}</span>
+          <span>Scheme: {loadingSelectedItem ? "..." : selectedItem.Scheme || "-"}</span>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <FloatingLabelDecimalInput
@@ -1371,6 +1417,8 @@ export default function SalesOrderPage({
           <button
             type="button"
             onClick={() => {
+              ++itemDetailRequestRef.current;
+              setLoadingSelectedItem(false);
               setSelectedItem(null);
               setEditingCartUid(null);
               setReviewAddingItem(true);
@@ -1388,7 +1436,8 @@ export default function SalesOrderPage({
               registerSelectedItem();
               if (reviewMode && itemSourceTab !== "companies") setReviewAddingItem(false);
             }}
-            className="grid h-10 w-10 place-items-center rounded-full bg-blue-600 text-xl font-bold text-white shadow-sm"
+            disabled={loadingSelectedItem}
+            className="grid h-10 w-10 place-items-center rounded-full bg-blue-600 text-xl font-bold text-white shadow-sm disabled:cursor-wait disabled:opacity-50"
             aria-label={editingCartUid ? "Update item" : "Add item"}
           >
             {editingCartUid ? "✓" : "+"}

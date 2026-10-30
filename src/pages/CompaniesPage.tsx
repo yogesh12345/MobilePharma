@@ -441,12 +441,6 @@ export default function CompaniesPage({
             />
           </div>
 
-          {!canUpdateCompany && (
-            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-              You have view-only access for company details.
-            </div>
-          )}
-
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-lg backdrop-blur">
             <div className="mx-auto flex w-full max-w-3xl justify-end gap-2">
             <button

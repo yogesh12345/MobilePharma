@@ -16,6 +16,7 @@ interface AutoCompleteItem {
   label4?: string;
   label5?: string;
   label6?: string;
+  item?: unknown;
   PaymentMode?: string;
   paymentMode?: string;
 }
