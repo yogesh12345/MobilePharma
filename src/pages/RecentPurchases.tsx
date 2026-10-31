@@ -1,5 +1,6 @@
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import API from "../services/api";
+import { openInvoicePdf } from "../services/invoicePdf";
 
 export type PurchaseInvoice = {
   id: number;
@@ -55,6 +56,8 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
   const [itemsByInvoice, setItemsByInvoice] = useState<Record<string, InvoiceItem[]>>({});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [detailError, setDetailError] = useState("");
+  const [printError, setPrintError] = useState("");
+  const [printingKey, setPrintingKey] = useState<string | null>(null);
   const lastTap = useRef<{ key: string; at: number } | null>(null);
   const lastItemTap = useRef<{ key: string; at: number } | null>(null);
   const lastTouchOpen = useRef(0);
@@ -82,6 +85,7 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
     const key = invoiceKey(invoice);
     setSelectedKey(key);
     setDetailError("");
+    setPrintError("");
     if (itemsByInvoice[key] || pendingKeys.current.has(key)) return;
     pendingKeys.current.add(key);
     setLoadingKey(key);
@@ -96,6 +100,28 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
     } finally {
       pendingKeys.current.delete(key);
       setLoadingKey((current) => (current === key ? null : current));
+    }
+  };
+
+  const printInvoice = async (invoice: PurchaseInvoice) => {
+    const key = invoiceKey(invoice);
+    if (printingKey) return;
+    setPrintingKey(key);
+    setPrintError("");
+    try {
+      await openInvoicePdf(invoice.id, invoice.invoiceYear);
+    } catch (error: unknown) {
+      const response = error as { response?: { data?: Blob | { error?: string } }; message?: string };
+      const data = response.response?.data;
+      let backendError = "";
+      if (data instanceof Blob) {
+        try { backendError = (JSON.parse(await data.text()) as { error?: string }).error || ""; } catch { /* Use the request error. */ }
+      } else {
+        backendError = data?.error || "";
+      }
+      setPrintError(backendError || response.message || "Unable to open invoice PDF.");
+    } finally {
+      setPrintingKey(null);
     }
   };
 
@@ -164,8 +190,12 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                       <td colSpan={6} className="p-3">
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <h3 className="font-semibold">Items in {invoice.invoiceNo} · {date(invoice.invoiceDate)} · {money(invoice.amount)}</h3>
-                          <button type="button" onClick={() => setSelectedKey(null)} className="rounded border border-slate-300 bg-white px-3 py-1 text-sm">Close</button>
+                          <div className="flex shrink-0 gap-2">
+                            <button type="button" onClick={() => void printInvoice(invoice)} disabled={printingKey !== null} className="rounded border border-blue-700 bg-blue-700 px-3 py-1 text-sm text-white disabled:opacity-50">{printingKey === key ? "Generating..." : "Print"}</button>
+                            <button type="button" onClick={() => setSelectedKey(null)} className="rounded border border-slate-300 bg-white px-3 py-1 text-sm">Close</button>
+                          </div>
                         </div>
+                        {printError && <p role="alert" className="mb-2 text-sm text-red-700">{printError}</p>}
                         {loadingKey === key ? <p className="py-2 text-slate-600">Loading items...</p> : detailError ? <p role="alert" className="py-2 text-red-700">{detailError}</p> : (
                           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                             <table className="min-w-[710px] w-full text-left text-[11px]">

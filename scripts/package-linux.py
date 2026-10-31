@@ -6,7 +6,7 @@ import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "release" / "MobilePharma-linux-2026-10-30.zip"
+ARCHIVE = ROOT / "release" / "MobilePharma-linux-2026-10-30-rev2.zip"
 SOURCE_FILES = (
     "package.json",
     "package-lock.json",
@@ -68,11 +68,11 @@ Do not deploy the `source/` directory as the web root.
 
 ## Backend compatibility
 
-`backend-patch/sales-order-search-full-item.patch` contains the companion
-Go API change for immediate Sales Order item selection. Apply it in the
-matching PharmaSys backend repository, build and restart that backend using
-its normal deployment process. Older backends still work with a fallback
-item-detail request, but selecting a searched item can be slower.
+Immediate Sales Order item selection requires the Go API search response to
+include each item's full record. Older backends still work with a fallback
+item-detail request, but selecting a searched item can be slower. If this
+archive contains `backend-patch/sales-order-search-full-item.patch`, apply it
+in the matching backend repository and restart that service.
 
 See `source/WEB_DEPLOY.md` for more context.
 """
