@@ -22,6 +22,7 @@ SOURCE_FILES = (
     "README.md",
     "MOBILE_DOMAIN_DEPLOY.md",
     "scripts/deploy-mobile-domain.sh",
+    "scripts/check-mobile-backend.mjs",
 )
 SOURCE_DIRS = ("src", "public", "deploy")
 

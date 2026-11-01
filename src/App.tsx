@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MobileAccessProvider } from "./context/MobileAccessContext";
 import LoginPage from "./pages/LoginPage";
 import MobileTabsPage from "./pages/MobileTabsPage";
 import NetworkStatusBanner from "./components/NetworkStatusBanner";
@@ -99,7 +100,7 @@ export default function App() {
         </main>
       ) : authState === "authenticated" ? (
         <PermissionProvider>
-          <MobileTabsPage onLogout={logout} initialUserName={loggedInUserName} />
+          <MobileAccessProvider><MobileTabsPage onLogout={logout} initialUserName={loggedInUserName} /></MobileAccessProvider>
         </PermissionProvider>
       ) : (
         <LoginPage

@@ -11,6 +11,10 @@ if [ ! -f package.json ] || [ ! -f package-lock.json ]; then
     exit 1
 fi
 
+# This build requires the account-access API; do not replace the live app
+# when the Go service is still running an older version.
+node scripts/check-mobile-backend.mjs
+
 npm ci
 ./node_modules/.bin/tsc -b
 ./node_modules/.bin/vite build --mode web --base /

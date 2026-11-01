@@ -35,3 +35,75 @@ input {
   position: relative;
   width: 100%;
 }
+
+.portal-offer-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px 16px;
+  padding-top: 12px;
+}
+
+.portal-offer-duration,
+.portal-offer-date {
+  flex: 0 1 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.portal-offer-percentage {
+  flex: 0 1 240px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.portal-offer-filters .listbox-button,
+.portal-offer-filters input:not([type="date"]) {
+  width: 100%;
+  height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  padding: 8px 36px 8px 12px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.portal-offer-filters .listbox-button:focus-visible,
+.portal-offer-filters input:not([type="date"]):focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+.portal-offer-filters .floating-label-group > label {
+  position: absolute;
+  top: -10px;
+  left: 12px;
+  padding: 0 4px;
+  background: white;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.portal-offer-filters button[aria-label="Open calendar"] {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  translate: none;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+}
+
+.portal-offer-filters input[type="date"][aria-hidden] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}

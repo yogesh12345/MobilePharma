@@ -11,7 +11,7 @@ import type { InvoiceItem, PurchaseInvoice } from "./RecentPurchases";
 type Reason = "Expired" | "Near Expiry" | "Breakage" | "Spoiled" | "Rate Difference";
 type Batch = { batSrNo: number; batchNo: string; mrp: number; expiry: string; retailRate: number; gstPercent: number };
 type ClaimItem = { key: string; source: "invoice" | "manual"; invoiceId?: number; invoiceYear?: number; invoiceNo?: string; saleDetailId?: number; saleLocation?: number; itemId: number; itemName: string; batchNo: string; batSrNo: number; mrp: number; expiry: string; retailRate: number; gstPercent: number; invoiceQty1?: number; invoiceQty2?: number; quantity: number; reason: Reason | ""; reductionPercent: number };
-type Claim = { id: number; claimNo: string; claimDate: string; status: string; claimAmount: number };
+type Claim = { id: number; claimNo: string; claimDate: string; status: string; claimAmount: number; includeGst: boolean; items?: Omit<ClaimItem, "key">[] };
 type Config = { claimDate: string; sequenceMode: string; suggestedClaimNo: string };
 const reasons: Reason[] = ["Expired", "Near Expiry", "Breakage", "Spoiled", "Rate Difference"];
 const box = "rounded-xl border border-slate-200 bg-white p-4 shadow-sm";
@@ -25,6 +25,7 @@ export default function RaiseCreditNote() {
   const containerRef = useRef<HTMLElement>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [invoices, setInvoices] = useState<PurchaseInvoice[]>([]);
+  const [editingClaim, setEditingClaim] = useState<Claim | null>(null);
   const [claims, setClaims] = useState<Claim[]>([]);
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [manualQuery, setManualQuery] = useState("");
@@ -87,13 +88,13 @@ export default function RaiseCreditNote() {
     if (!items.length) { setError("Add at least one item to the claim."); return; }
     for (const item of items) { const limit = (item.invoiceQty1 ?? 0) + (item.invoiceQty2 ?? 0); if (!Number.isInteger(item.quantity) || item.quantity <= 0 || (item.source === "invoice" && item.quantity > limit)) { setError(`Enter a whole-number claim quantity for ${item.itemName}${item.source === "invoice" ? ` (maximum ${Math.floor(limit)})` : ""}.`); return; } if (!item.reason) { setError(`Select a claim reason for ${item.itemName}.`); return; } if (!Number.isFinite(item.reductionPercent) || item.reductionPercent < 0 || item.reductionPercent > 100) { setError(`Enter a reduction percentage from 0 to 100 for ${item.itemName}.`); return; } }
     setBusy(true);
-    try { const { data } = await API.post("/mobile/customer-portal/claims", { includeGst, items: items.map(({ source, invoiceId, invoiceYear, saleDetailId, saleLocation, itemId, itemName, batSrNo, quantity, reason, reductionPercent }) => ({ source, invoiceId, invoiceYear, saleDetailId, saleLocation, itemId, itemName, batSrNo, quantity, reason, reductionPercent })) }); setSuccess(`Claim ${data.claim.claimNo} submitted for review.`); setItems([]); try { await load(); } catch { setError("Claim submitted, but the recent claims list could not be refreshed."); } }
+    try { const payload = { includeGst, items: items.map(({ source, invoiceId, invoiceYear, saleDetailId, saleLocation, itemId, itemName, batSrNo, quantity, reason, reductionPercent }) => ({ source, invoiceId, invoiceYear, saleDetailId, saleLocation, itemId, itemName, batSrNo, quantity, reason, reductionPercent })) }; const { data } = editingClaim ? await API.put(`/mobile/customer-portal/claims/${editingClaim.id}`,payload) : await API.post("/mobile/customer-portal/claims",payload); setEditingClaim(null); setSuccess(`Claim ${data.claim.claimNo} submitted for review.`); setItems([]); try { await load(); } catch { setError("Claim submitted, but the recent claims list could not be refreshed."); } }
     catch (e) { setError(errorText(e, "Unable to submit the claim.")); }
     finally { setBusy(false); }
   };
 
   return <section ref={containerRef} className="space-y-5 overflow-y-auto overscroll-contain">
-    <div><h2 className="text-xl font-bold">Raise a credit note claim</h2><p className="text-sm text-slate-600">Add products from an invoice in the last six months, or search for an older item and choose its batch. Claims are submitted for review.</p></div>
+    <div><h2 className="text-xl font-bold">{editingClaim ? `Update claim ${editingClaim.claimNo}` : "Raise a credit note claim"}</h2>{editingClaim && <button type="button" className="text-sm text-blue-700 underline" onClick={() => { setEditingClaim(null);setItems([]); }}>Cancel editing</button>}<p className="text-sm text-slate-600">Add products from an invoice in the last six months, or search for an older item and choose its batch. Claims are submitted for review.</p></div>
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}{success && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{success}</p>}
     {loading ? <p>Loading claim details...</p> : <>
       <div className={`${box} flex flex-wrap items-center gap-x-8 gap-y-2 text-sm`}><div className="flex items-baseline gap-2 whitespace-nowrap"><span className="text-slate-500">Claim date:</span><strong>{config?.claimDate ?? "—"}</strong></div><div className="flex items-baseline gap-2 whitespace-nowrap"><span className="text-slate-500">Claim No.:</span><strong>{config?.suggestedClaimNo ?? "—"}</strong></div><p className="w-full text-xs text-slate-500">Sequence resets {config?.sequenceMode === "financial_year" ? "each financial year" : "monthly"}. The final number is assigned on submit.</p></div>
@@ -140,8 +141,8 @@ export default function RaiseCreditNote() {
           {!items.length && <p className="text-sm text-slate-500">Add an item from A or B.</p>}
         </div>
       </div>
-      <div className={box}><div className="space-y-1 text-sm"><p className="flex justify-between"><span>Item value</span><strong>₹{money(totals.base)}</strong></p><p className="flex justify-between"><span>GST</span><strong>₹{money(totals.gst)}</strong></p></div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={includeGst} onChange={e => setIncludeGst(e.target.checked)} />Include GST in approximate claim amount</label><p className="mt-3 flex justify-between border-t pt-3 font-bold"><span>Approximate claim</span><span>₹{money(round(totals.base + (includeGst ? totals.gst : 0)))}</span></p><button type="button" disabled={busy || !items.length} onClick={() => void submit()} className="mt-4 w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Submitting..." : "Submit claim"}</button></div>
-      <div className={box}><h3 className="mb-2 font-bold">Recent claims</h3>{claims.map(claim => <p key={claim.id} className="border-t py-2 text-sm"><strong>{claim.claimNo}</strong> · {claim.claimDate.slice(0, 10)} · {claim.status} · ₹{money(claim.claimAmount)}</p>)}{!claims.length && <p className="text-sm text-slate-500">No claims submitted yet.</p>}</div>
+      <div className={box}><div className="space-y-1 text-sm"><p className="flex justify-between"><span>Item value</span><strong>₹{money(totals.base)}</strong></p><p className="flex justify-between"><span>GST</span><strong>₹{money(totals.gst)}</strong></p></div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={includeGst} onChange={e => setIncludeGst(e.target.checked)} />Include GST in approximate claim amount</label><p className="mt-3 flex justify-between border-t pt-3 font-bold"><span>Approximate claim</span><span>₹{money(round(totals.base + (includeGst ? totals.gst : 0)))}</span></p><button type="button" disabled={busy || !items.length} onClick={() => void submit()} className="mt-4 w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Saving..." : editingClaim ? "Update claim" : "Submit claim"}</button></div>
+      <div className={box}><h3 className="mb-2 font-bold">Recent claims</h3>{claims.map(claim => <p key={claim.id} className="border-t py-2 text-sm"><strong>{claim.claimNo}</strong> · {claim.claimDate.slice(0, 10)} · {claim.status} · ₹{money(claim.claimAmount)}{claim.status === "PENDING" && <button type="button" disabled={busy} className="ml-3 text-blue-700 underline" onClick={() => { setEditingClaim(claim);setIncludeGst(claim.includeGst);setItems((claim.items ?? []).map((item,index) => ({ ...item,key:`edit:${claim.id}:${index}`,reason:String(item.reason) === "Expire" ? "Expired" : item.reason })));setError("");setSuccess("");containerRef.current?.scrollTo({ top:0,behavior:"smooth" }); }}>Edit</button>}</p>)}{!claims.length && <p className="text-sm text-slate-500">No claims submitted yet.</p>}</div>
     </>}
   </section>;
 }

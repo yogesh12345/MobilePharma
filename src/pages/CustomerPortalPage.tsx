@@ -1,13 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useMobileAccess } from "../context/mobileAccess";
 import API from "../services/api";
 import CompaniesPage, { type CompaniesPageHandle } from "./CompaniesPage";
-import SalesOrderPage from "./SalesOrderPage";
+import PortalOrders from "./PortalOrders";
 import RecentPurchases from "./RecentPurchases";
 import type { PurchaseInvoice } from "./RecentPurchases";
 import RaiseCreditNote from "./RaiseCreditNote";
+import ArrivalsAndSchemes from "./ArrivalsAndSchemes";
 import { ArrowLeftIcon, BuildingOffice2Icon, ClipboardDocumentListIcon, DocumentTextIcon, ReceiptRefundIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
 
-type View = "home" | "companies" | "orders" | "credit" | "purchases" | "outstanding";
+type View = "home" | "companies" | "orders" | "credit" | "purchases" | "outstanding" | "arrivals";
 type Invoice = PurchaseInvoice;
 type OutstandingInvoice = { invoiceNo: string; invoiceDate: string; invoiceAmount: number; balanceAmount: number };
 
@@ -26,7 +28,8 @@ const outstandingStatus = (invoice: OutstandingInvoice): "PENDING" | "PART" => {
 
 const task = "flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl text-center text-sm font-semibold transition hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:text-base";
 
-export default function CustomerPortalPage({ linked, onOpenProfile }: { linked: boolean; onOpenProfile: () => void }) {
+export default function CustomerPortalPage({ linked }: { linked: boolean }) {
+  const access = useMobileAccess();
   const [view, setView] = useState<View>("home");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [outstanding, setOutstanding] = useState<OutstandingInvoice[]>([]);
@@ -34,8 +37,8 @@ export default function CustomerPortalPage({ linked, onOpenProfile }: { linked: 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const companiesRef = useRef<CompaniesPageHandle>(null);
-  const visibleView = !linked && view !== "home" && view !== "companies" ? "home" : view;
-
+  const viewPermission: Record<string, string> = { companies: "catalog", orders: "orders", credit: "credit_notes", purchases: "invoices", outstanding: "outstanding", arrivals: "arrivals" };
+  const visibleView = view === "home" || access.can(viewPermission[view]) ? view : "home";
   useEffect(() => {
     if (view !== "purchases" || !linked) return;
     let active = true;
@@ -76,21 +79,23 @@ export default function CustomerPortalPage({ linked, onOpenProfile }: { linked: 
     goHome();
   };
 
-  return <section className={`mx-auto w-full max-w-3xl space-y-4 px-4 pt-1 ${visibleView === "credit" || visibleView === "companies" ? "pb-0" : visibleView === "home" ? "pb-5" : "pb-24"}`}>
+  return <section className={`mx-auto w-full max-w-3xl space-y-4 px-4 pt-1 ${visibleView === "credit" || visibleView === "companies" || visibleView === "arrivals" ? "pb-0" : visibleView === "home" ? "pb-5" : "pb-24"}`}>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {message && <p role="status" className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{message}</p>}
     {visibleView === "home" && <>
-      {!linked && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">The company catalog is available now. Activate your customer profile to place orders. <button type="button" className="font-bold underline" onClick={onOpenProfile}>Open profile</button></div>}
+      {!linked && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Your account is awaiting review. You can browse companies and items while the system administrator reviews your access.</div>}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <button type="button" onClick={() => setView("companies")} className={`${task} text-blue-900`}><BuildingOffice2Icon className="h-11 w-11" aria-hidden="true" /><span>Companies</span></button>
-        {linked && <button type="button" onClick={() => setView("orders")} className={`${task} text-violet-900`}><ClipboardDocumentListIcon className="h-11 w-11" aria-hidden="true" /><span>Sales Order</span></button>}
-        {linked && <button type="button" onClick={() => setView("credit")} className={`${task} text-rose-900`}><ReceiptRefundIcon className="h-11 w-11" aria-hidden="true" /><span>Raise credit note</span></button>}
-        {linked && <button type="button" onClick={() => setView("purchases")} className={`${task} text-emerald-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>Recent purchases</span></button>}
-        {linked && <button type="button" onClick={() => setView("outstanding")} className={`${task} text-amber-900`}><DocumentTextIcon className="h-11 w-11" aria-hidden="true" /><span>Outstanding invoices</span></button>}
+        {access.can("catalog") && <button type="button" onClick={() => setView("companies")} className={`${task} text-blue-900`}><BuildingOffice2Icon className="h-11 w-11" aria-hidden="true" /><span>Companies</span></button>}
+        {access.can("orders") && <button type="button" onClick={() => setView("orders")} className={`${task} text-violet-900`}><ClipboardDocumentListIcon className="h-11 w-11" aria-hidden="true" /><span>Sales Order</span></button>}
+        {access.can("credit_notes") && <button type="button" onClick={() => setView("credit")} className={`${task} text-rose-900`}><ReceiptRefundIcon className="h-11 w-11" aria-hidden="true" /><span>Raise credit note</span></button>}
+        {access.can("invoices") && <button type="button" onClick={() => setView("purchases")} className={`${task} text-emerald-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>Recent purchases</span></button>}
+        {access.can("outstanding") && <button type="button" onClick={() => setView("outstanding")} className={`${task} text-amber-900`}><DocumentTextIcon className="h-11 w-11" aria-hidden="true" /><span>Outstanding invoices</span></button>}
+      {access.can("arrivals") && <button type="button" onClick={() => setView("arrivals")} className={`${task} text-teal-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>New arrivals and schemes</span></button>}
       </div>
     </>}
+    {visibleView === "arrivals" && <ArrivalsAndSchemes />}
     {visibleView === "companies" && <CompaniesPage ref={companiesRef} compactTop canUpdateCompany={false} canUpdateRack={false} />}
-    {visibleView === "orders" && linked && <SalesOrderPage customerProfileMode onBackToHome={goHome} />}
+    {visibleView === "orders" && linked && <PortalOrders onBack={goHome} />}
     {visibleView === "credit" && linked && <RaiseCreditNote />}
     {visibleView === "purchases" && linked && <RecentPurchases invoices={invoices} fillViewport />}
     {visibleView === "outstanding" && linked && <>

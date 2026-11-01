@@ -1,9 +1,13 @@
 import axios from "axios";
 import { removeStoredToken, TOKEN_KEY } from "./storage";
 
+let mobileCustomerId: number | null = null;
+export function setMobileCustomerId(id: number | null) { mobileCustomerId = id; }
+
 let cachedToken = localStorage.getItem(TOKEN_KEY);
 
 export function setApiToken(token: string | null) {
+  if (cachedToken !== token) mobileCustomerId = null;
   cachedToken = token;
 }
 
@@ -24,6 +28,7 @@ const API = axios.create({
 });
 
 API.interceptors.request.use((config) => {
+  if (mobileCustomerId) config.headers["X-Mobile-Customer-ID"] = String(mobileCustomerId);
   const token = cachedToken || localStorage.getItem(TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

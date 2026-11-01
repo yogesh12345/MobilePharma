@@ -1,3 +1,4 @@
+import MobileVerification from "./MobileVerification";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import API, { setApiToken } from "../services/api";
@@ -27,6 +28,7 @@ const getErrorMessage = (error: unknown) => {
 };
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
+  const [verification, setVerification] = useState<"register" | "recover" | null>(null);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,7 +37,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!identifier.trim() || !password) {
-      setError("Enter username/email and password.");
+      setError("Enter username, email or WhatsApp number and password.");
       return;
     }
 
@@ -60,6 +62,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
   };
 
+  if (verification) return <MobileVerification mode={verification} onBack={() => setVerification(null)} />;
+
   return (
     <main className="min-h-dvh bg-slate-100 px-4 py-8 flex items-center justify-center">
       <section className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
@@ -71,7 +75,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <FloatingLabelInput
             id="loginIdentifier"
-            label="Username / Email"
+            label="Username / Email / WhatsApp"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             autoComplete="username"
@@ -101,6 +105,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           >
             {busy ? "Signing in..." : "Login"}
           </button>
+          <div className="flex flex-wrap justify-between gap-3 text-sm font-semibold text-blue-700"><button type="button" onClick={() => setVerification("register")}>Register / activate invitation</button><button type="button" onClick={() => setVerification("recover")}>Forgot credentials?</button></div>
         </form>
       </section>
     </main>

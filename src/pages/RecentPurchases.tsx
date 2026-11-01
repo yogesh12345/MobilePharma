@@ -129,7 +129,6 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
     <section className="space-y-3">
       <div>
         <h2 className="text-xl font-bold">{title}</h2>
-        <p className="mt-1 text-sm text-slate-600">Double tap an invoice to view its items.{onItemSelect && " Double tap an item to add it to the claim."} On a keyboard, press Enter.</p>
       </div>
       <div ref={listRef} className={`${fillViewport ? "" : "max-h-[min(60vh,32rem)]"} overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm`}>
         <table className="w-auto border-collapse text-left text-xs sm:text-sm">
@@ -139,7 +138,6 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
               <th className="whitespace-nowrap px-1.5 py-2 font-semibold">Invoice No.</th>
               <th className="whitespace-nowrap px-1.5 py-2 text-right font-semibold">Total GST</th>
               <th className="whitespace-nowrap px-1.5 py-2 text-right font-semibold">Invoice Amount</th>
-              <th className="whitespace-nowrap px-1.5 py-2 font-semibold">Due Date</th>
               <th className="whitespace-nowrap px-1.5 py-2 font-semibold">Status</th>
             </tr>
           </thead>
@@ -182,12 +180,11 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                     <td className="whitespace-nowrap px-1.5 py-2 font-semibold text-blue-900">{invoice.invoiceNo}</td>
                     <td className="whitespace-nowrap px-1.5 py-2 text-right">{money(invoice.totalGST)}</td>
                     <td className="whitespace-nowrap px-1.5 py-2 text-right">{money(invoice.amount)}</td>
-                    <td className="whitespace-nowrap px-1.5 py-2">{date(invoice.dueDate)}</td>
                     <td className="whitespace-nowrap px-1.5 py-2">{invoice.status || "—"}</td>
                   </tr>
                   {expanded && (
                     <tr className="border-t border-blue-200 bg-blue-50/60">
-                      <td colSpan={6} className="px-2 py-3">
+                      <td colSpan={5} className="px-2 py-3">
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <h3 className="font-semibold">Items in {invoice.invoiceNo} · {date(invoice.invoiceDate)} · {money(invoice.amount)}</h3>
                           <div className="flex shrink-0 gap-2">
@@ -243,7 +240,7 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                 </Fragment>
               );
             })}
-            {invoices.length === 0 && <tr><td colSpan={6} className="px-3 py-5 text-slate-600">No purchases found.</td></tr>}
+            {invoices.length === 0 && <tr><td colSpan={5} className="px-3 py-5 text-slate-600">No purchases found.</td></tr>}
           </tbody>
         </table>
       </div>

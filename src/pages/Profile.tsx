@@ -8,7 +8,7 @@ import type { ProfileForm } from "./profileForm";
 
 const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 
-export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCredentialsChanged, onStatusChange }: { onBack: () => void; onUsernameChange?: (name: string) => void; onProfileSaved?: (profile: { status: string; customerId: number | null } & Record<string, unknown>) => void; onCredentialsChanged?: () => void; onStatusChange?: (status: string) => void }) {
+export default function Profile({ onOpenCredentials, onBack, onUsernameChange, onProfileSaved, onCredentialsChanged, onStatusChange }: { onOpenCredentials?: () => void; onBack: () => void; onUsernameChange?: (name: string) => void; onProfileSaved?: (profile: { status: string; customerId: number | null } & Record<string, unknown>) => void; onCredentialsChanged?: () => void; onStatusChange?: (status: string) => void }) {
   const [form, setForm] = useState<ProfileForm>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -49,7 +49,7 @@ export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCr
 
   const field = (key: keyof ProfileForm, label: string, options: { required?: boolean; type?: string; autoComplete?: string; pattern?: string; maxLength?: number; hint?: string } = {}) => (
     <div className="space-y-1.5 pt-2" key={key}>
-      <FloatingLabelInput id={`profile-${key}`} label={`${label}${options.required ? " *" : ""}`} aria-invalid={Boolean(fieldErrors[key])} aria-describedby={fieldErrors[key] ? `${key}-error` : undefined} className={`${inputClass} ${fieldErrors[key] ? "border-red-500 focus:border-red-600 focus:ring-red-100" : ""}`} value={form[key]} onChange={set(key)} required={options.required} type={options.type ?? "text"} autoComplete={options.autoComplete} pattern={options.pattern} maxLength={options.maxLength} inputMode={key === "mobileNo" || key === "whatsAppNo" || key === "pin" ? "tel" : undefined} title={options.hint} />
+      <FloatingLabelInput id={`profile-${key}`} label={`${label}${options.required ? " *" : ""}`} aria-invalid={Boolean(fieldErrors[key])} aria-describedby={fieldErrors[key] ? `${key}-error` : undefined} className={`${inputClass} ${fieldErrors[key] ? "border-red-500 focus:border-red-600 focus:ring-red-100" : ""}`} disabled={key === "username"} value={form[key]} onChange={set(key)} required={options.required} type={options.type ?? "text"} autoComplete={options.autoComplete} pattern={options.pattern} maxLength={options.maxLength} inputMode={key === "mobileNo" || key === "whatsAppNo" || key === "pin" ? "tel" : undefined} title={options.hint} />
       {fieldErrors[key] && <span id={`${key}-error`} className="block text-sm font-medium text-red-700">{fieldErrors[key]}</span>}
       {options.hint && <span className="block text-xs text-slate-500">{options.hint}</span>}
     </div>
@@ -124,7 +124,7 @@ export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCr
         <label className="block space-y-1.5"><span className="text-sm font-semibold text-slate-700">Remark</span><textarea className={inputClass} rows={3} maxLength={2000} value={form.remark} onChange={set("remark")} /></label>
       </div>
       <button type="submit" disabled={saving} className="w-full rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-60">{saving ? "Saving..." : status ? "Save profile" : "Register profile"}</button>
-      <button type="button" onClick={() => { setResetUsername(form.username); setResetError(""); setResetOpen(true); }} className="w-full rounded-xl border border-blue-700 bg-white px-4 py-3 font-semibold text-blue-700">Reset login credentials</button>
+      <button type="button" onClick={() => { if (onOpenCredentials) { onOpenCredentials(); return; } setResetUsername(form.username); setResetError(""); setResetOpen(true); }} className="w-full rounded-xl border border-blue-700 bg-white px-4 py-3 font-semibold text-blue-700">Reset login credentials</button>
     </form>}
     <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur">
       <div className="mx-auto max-w-3xl">

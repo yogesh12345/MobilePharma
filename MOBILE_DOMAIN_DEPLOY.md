@@ -36,6 +36,43 @@ block, test the configuration, and reload Nginx. This forwards the current
 frontend's request to the already running Go `/stock/current/` handler, so a
 frontend rebuild is not required for this specific stock fix.
 
+## Account-access API requirement
+
+The current app requires `GET /mobile/access`. If the app opens but shows an
+account-access error, check the public endpoint without a token:
+
+```bash
+curl -i https://mobile.meenaagencies.co.in/mobile/access
+curl -i https://back.meenaagencies.co.in/mobile/access
+```
+
+An existing protected route returns **401 with JSON** (`Token required`).
+A **404 on both hosts**, while `/me` returns 401 JSON, means the running API
+has no account-access route. Updating Nginx or clearing the phone cache will
+not add that route. A 200 HTML response indicates the API request is reaching
+the SPA fallback instead of Go.
+
+Before publishing this frontend:
+
+1. Deploy the complete current Go backend source, including the mobile access
+   models, services, migrations, controllers, middleware, routes, and updated
+   `config/database.go`. Copying only `routes/protected.go` is insufficient.
+2. Follow the existing backend release procedure to rebuild and restart the
+   configured Go service. Its startup runs `MigrateMobileAccess`; confirm it
+   completes successfully. See `D:/Backend/docs/mobile-account-access.md`
+   for the migration and rollout requirements, including the database backup.
+3. Confirm `/mobile/access` now returns 401 JSON without a token on both hosts.
+   From this frontend source directory, run `npm run check:backend`.
+4. Use **Our Organization > Mobile User Review** in the updated main web app
+   to review existing external accounts and assign their customer access.
+5. Have the user sign in again and verify the authenticated `/mobile/access`
+   request returns 200 JSON with `account`, `user`, and `customers`.
+
+`scripts/deploy-mobile-domain.sh` checks this required protected route before
+building or copying app files. This check detects a missing route; it does not
+replace authenticated verification of database migrations and assignments.
+The deployment bundle is frontend-only and cannot update the Go service.
+
 ## Build
 
 ```bash
