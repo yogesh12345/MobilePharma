@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
+import { searchCompanyItems } from "./companyItemSearch";
 
 type CompanyRow = {
   id: number;
@@ -17,11 +18,6 @@ type CompanyItem = {
   MRP: number;
   PurDate?: string | null;
   RackNumber?: string | null;
-
-  // These may still be returned by /mobile/companies/:id/items,
-  // but they are intentionally NOT used for current stock display.
-  StockQty1?: number;
-  StockQty2?: number;
 };
 
 type CompanyDetail = {
@@ -44,6 +40,10 @@ interface CompaniesPageProps {
   focusItemId?: number | null;
   focusRequestKey?: number;
 }
+
+export type CompaniesPageHandle = {
+  backToCompaniesList: () => boolean;
+};
 
 const money = (n: number) =>
   Number(n || 0).toLocaleString("en-IN", {
@@ -78,19 +78,24 @@ const formatStock = (qty1: number, qty2: number) => {
 const inputClass =
   "w-full rounded-md border border-blue-400 bg-white px-3 py-2.5 font-semibold text-gray-900 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-200";
 
+const apiErrorMessage = (error: unknown, fallback: string) =>
+  (error as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
+
 const STOCK_BATCH_SIZE = 10;
 
-export default function CompaniesPage({
+const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(function CompaniesPage({
   compactTop = false,
   onEditRack,
   canUpdateCompany = true,
   canUpdateRack = true,
   focusItemId = null,
   focusRequestKey = 0,
-}: CompaniesPageProps) {
+}: CompaniesPageProps, ref) {
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [selected, setSelected] = useState<CompanyDetail | null>(null);
   const companyListRef = useRef<HTMLElement>(null);
+  const companyDetailRef = useRef<HTMLDivElement>(null);
+  const companyFooterRef = useRef<HTMLElement>(null);
   const [items, setItems] = useState<CompanyItem[]>([]);
   const [currentStock, setCurrentStock] = useState<Record<number, CurrentStock>>(
     {},
@@ -99,6 +104,7 @@ export default function CompaniesPage({
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingStock, setLoadingStock] = useState(false);
+  const [stockUnavailableCount, setStockUnavailableCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [compName, setCompName] = useState("");
@@ -112,6 +118,36 @@ export default function CompaniesPage({
    */
   const stockRequestKeyRef = useRef(0);
   const itemButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+
+  useLayoutEffect(() => {
+    if (!selected) return;
+    const detail = companyDetailRef.current;
+    const footer = compactTop
+      ? document.getElementById("customer-portal-footer")
+      : companyFooterRef.current;
+    if (!detail || !footer) return;
+    const updateHeight = () => {
+      // Use the visible viewport so the list also fits above a mobile keyboard.
+      const viewport = window.visualViewport;
+      const bottom = Math.min(
+        footer.getBoundingClientRect().top,
+        viewport ? viewport.offsetTop + viewport.height : window.innerHeight,
+      );
+      detail.style.height = `${Math.max(0, Math.floor(bottom - detail.getBoundingClientRect().top - 8))}px`;
+    };
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(footer);
+    window.addEventListener("resize", updateHeight);
+    window.visualViewport?.addEventListener("resize", updateHeight);
+    window.visualViewport?.addEventListener("scroll", updateHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+      window.visualViewport?.removeEventListener("resize", updateHeight);
+      window.visualViewport?.removeEventListener("scroll", updateHeight);
+    };
+  }, [compactTop, selected]);
 
   useLayoutEffect(() => {
     if (!compactTop || selected) return;
@@ -161,10 +197,8 @@ export default function CompaniesPage({
       setCompanies(
         Array.isArray(res.data?.companies) ? res.data.companies : [],
       );
-    } catch (e: any) {
-      setMessage(
-        e?.response?.data?.error || "Unable to load companies.",
-      );
+    } catch (error: unknown) {
+      setMessage(apiErrorMessage(error, "Unable to load companies."));
     } finally {
       setLoading(false);
     }
@@ -175,13 +209,13 @@ export default function CompaniesPage({
   }, []);
 
   /*
-   * Load true CURRENT/CLOSING stock from the existing stock controller.
+   * Load true current/closing stock from the existing stock controller.
    *
    * We deliberately do not use StockQty1 / StockQty2 returned by the
    * mobile company-items endpoint, because those values can represent
    * the stock opening snapshot (nstkopbal).
    *
-   * /stock/current/:itemId uses GetCurrentStockHandler and the existing
+   * /mobile/stock/current/:itemId uses GetCurrentStockHandler and the existing
    * stock-statement/closing-stock calculation already used by the web app.
    *
    * Requests are sent in small batches so a company with hundreds of
@@ -214,9 +248,19 @@ export default function CompaniesPage({
         const results = await Promise.all(
           batch.map(async (item) => {
             try {
-              const res = await API.get<CurrentStock>(
-                `/stock/current/${item.id}`,
-              );
+              let res;
+              try {
+                res = await API.get<CurrentStock>(`/mobile/stock/current/${item.id}`);
+              } catch (error: unknown) {
+                const status = (error as { response?: { status?: number } })?.response?.status;
+                if (status !== 404) throw error;
+                res = await API.get<CurrentStock>(`/stock/current/${item.id}`);
+              }
+
+              if (!Number.isFinite(Number(res.data?.ClosingQty1)) ||
+                  !Number.isFinite(Number(res.data?.ClosingQty2))) {
+                throw new Error("Invalid current stock response");
+              }
 
               return {
                 id: item.id,
@@ -246,6 +290,10 @@ export default function CompaniesPage({
         );
 
         if (stockRequestKeyRef.current !== requestKey) return;
+
+        setStockUnavailableCount((count) =>
+          count + results.filter((result) => result.failed).length,
+        );
 
         setCurrentStock((current) => {
           const next = { ...current };
@@ -279,6 +327,7 @@ export default function CompaniesPage({
     setMessage("");
     setItemSearch("");
     setCurrentStock({});
+    setStockUnavailableCount(0);
 
     try {
       const res = await API.get(
@@ -303,25 +352,31 @@ export default function CompaniesPage({
        * while stock values are progressively filled.
        */
       void loadCurrentStockForItems(companyItems, requestKey);
-    } catch (e: any) {
-      setMessage(
-        e?.response?.data?.error ||
-          "Unable to load company items.",
-      );
+    } catch (error: unknown) {
+      setMessage(apiErrorMessage(error, "Unable to load company items."));
     } finally {
       setLoadingItems(false);
     }
   };
 
-  const closeCompany = () => {
+  const closeCompany = useCallback(() => {
     stockRequestKeyRef.current += 1;
     setSelected(null);
     setItems([]);
     setCurrentStock({});
+    setStockUnavailableCount(0);
     setItemSearch("");
     setLoadingStock(false);
     setMessage("");
-  };
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    backToCompaniesList: () => {
+      if (!selected) return false;
+      closeCompany();
+      return true;
+    },
+  }), [selected, closeCompany]);
 
   const hasChange =
     !!selected &&
@@ -363,11 +418,8 @@ export default function CompaniesPage({
       );
 
       setMessage("Company updated successfully.");
-    } catch (e: any) {
-      setMessage(
-        e?.response?.data?.error ||
-          "Unable to update company.",
-      );
+    } catch (error: unknown) {
+      setMessage(apiErrorMessage(error, "Unable to update company."));
     } finally {
       setSaving(false);
     }
@@ -399,70 +451,44 @@ export default function CompaniesPage({
     return result;
   }, [companies]);
 
-  const filteredItems = useMemo(() => {
-    const q = itemSearch.trim().toLowerCase();
-
-    if (!q) return items;
-
-    return items.filter((item) =>
-      `${item.ItemName} ${item.Packing}`
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [items, itemSearch]);
+  const filteredItems = useMemo(
+    () => searchCompanyItems(items, itemSearch),
+    [items, itemSearch],
+  );
 
   if (selected) {
     return (
-      <div className={`mx-auto w-full max-w-3xl px-3 pb-24 sm:px-4 ${compactTop ? "pt-1" : "pt-4"}`}>
-        <button
-          type="button"
-          onClick={closeCompany}
-          className="mb-3 text-sm font-semibold text-blue-700"
-        >
-          ← Companies
-        </button>
-
-        <section className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
-          <div className="grid grid-cols-1 gap-5">
+      <div ref={companyDetailRef} className={`mx-auto flex min-h-0 w-full max-w-3xl flex-col gap-3 px-3 sm:px-4 ${compactTop ? "pt-1" : "pt-4"}`}>
+        <section className="shrink-0 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
+          <div className="p-3 sm:p-4">
+            {canUpdateCompany ? <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
             <FloatingLabelInput
               id="mobileCompName"
               label="Company Name"
               value={compName}
-              onChange={(e) => {
-                if (!canUpdateCompany) return;
-                setCompName(e.target.value);
-                setMessage("");
-              }}
-              disabled={!canUpdateCompany}
-              className={
-                canUpdateCompany
-                  ? inputClass
-                  : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
-              }
-              labelBgClassName={canUpdateCompany ? "bg-white" : "bg-gray-100"}
+              onChange={(e) => { setCompName(e.target.value); setMessage(""); }}
+              className={inputClass}
+              labelBgClassName="bg-white"
             />
 
             <FloatingLabelInput
               id="mobileCompShort"
               label="Short Name"
               value={compShort}
-              onChange={(e) => {
-                if (!canUpdateCompany) return;
-                setCompShort(e.target.value);
-                setMessage("");
-              }}
-              disabled={!canUpdateCompany}
-              className={
-                canUpdateCompany
-                  ? inputClass
-                  : "w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-700 shadow-sm disabled:cursor-default disabled:opacity-100"
-              }
-              labelBgClassName={canUpdateCompany ? "bg-white" : "bg-gray-100"}
+              onChange={(e) => { setCompShort(e.target.value); setMessage(""); }}
+              className={inputClass}
+              labelBgClassName="bg-white"
             />
-          </div>
+            </div> : <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+            <div className="min-w-0">
+              <h2 className="break-words font-bold leading-snug text-gray-900">{selected.CompName}</h2>
+            </div>
+            <div className="text-right">
+              <p className="font-semibold text-gray-800">{selected.CompShort || "-"}</p>
+            </div>
+            </div>}
 
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-lg backdrop-blur">
-            <div className="mx-auto flex w-full max-w-3xl justify-end gap-2">
+            {canUpdateCompany && <div className="mt-3 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => {
@@ -478,22 +504,21 @@ export default function CompaniesPage({
             <button
               type="button"
               onClick={saveCompany}
-              disabled={!canUpdateCompany || !hasChange || saving}
+              disabled={!hasChange || saving}
               className="rounded-md bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
             >
               {saving ? "Updating..." : "Update"}
             </button>
-            </div>
+            </div>}
+
+            {message && (
+              <div className="mt-3 text-sm font-medium">
+                {message}
+              </div>
+            )}
           </div>
 
-          {message && (
-            <div className="mt-3 text-sm font-medium">
-              {message}
-            </div>
-          )}
-        </section>
-
-        <section className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="border-t border-gray-200">
           <div className="flex items-center gap-2 border-b bg-gray-50 px-3 py-2">
             <div className="shrink-0 text-sm font-semibold text-gray-700">
               Items: {items.length}
@@ -511,9 +536,23 @@ export default function CompaniesPage({
             />
           </div>
 
+        </div>
+        </section>
+
+        <section
+          aria-label="Company items"
+          tabIndex={0}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl border border-blue-200 bg-white shadow-sm focus-visible:outline-2 focus-visible:outline-blue-500"
+        >
           {loadingStock && (
             <div className="border-b bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
               Updating current closing stock...
+            </div>
+          )}
+
+          {stockUnavailableCount > 0 && (
+            <div role="status" className="border-b bg-red-50 px-3 py-1 text-xs font-medium text-red-800">
+              Current stock is unavailable for {stockUnavailableCount} item(s).
             </div>
           )}
 
@@ -577,12 +616,15 @@ export default function CompaniesPage({
                           {item.ItemName}
                         </div>
 
-                        <div className="shrink-0 whitespace-nowrap text-sm font-medium text-gray-700">
-                          {item.Packing}
+                        <div className="shrink-0 whitespace-nowrap text-right text-sm font-bold tabular-nums text-blue-900">
+                          Stock: {stock === undefined
+                            ? "--"
+                            : formatStock(stock.ClosingQty1, stock.ClosingQty2)}
                         </div>
                       </div>
 
-                      <div className="mt-1 flex items-center gap-x-4 text-xs font-medium text-gray-600">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-gray-600">
+                        <span>{item.Packing}</span>
                         <span>
                           Rack: {item.RackNumber?.trim() || "-"}
                         </span>
@@ -595,12 +637,6 @@ export default function CompaniesPage({
                           MRP: {money(item.MRP)}
                         </span>
 
-                        <span className="ml-auto whitespace-nowrap text-right">
-                          Stock:{" "}
-                          {stock === undefined
-                            ? "--"
-                            : formatStock(stock.ClosingQty1, stock.ClosingQty2)}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -609,6 +645,11 @@ export default function CompaniesPage({
             })
           )}
         </section>
+        {!compactTop && <footer ref={companyFooterRef} className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+          <div className="mx-auto max-w-3xl">
+            <button type="button" onClick={closeCompany} className="min-h-11 rounded-lg px-4 font-semibold text-blue-700 hover:bg-blue-50">← Back</button>
+          </div>
+        </footer>}
       </div>
     );
   }
@@ -669,4 +710,6 @@ export default function CompaniesPage({
       </section>
     </div>
   );
-}
+});
+
+export default CompaniesPage;

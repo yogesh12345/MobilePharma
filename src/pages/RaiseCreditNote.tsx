@@ -8,12 +8,12 @@ import FloatingLabelShow from "../components/FloatingLabelShow";
 import RecentPurchases from "./RecentPurchases";
 import type { InvoiceItem, PurchaseInvoice } from "./RecentPurchases";
 
-type Reason = "Expire" | "Near Expiry" | "Breakage" | "Spoiled" | "Rate Difference";
+type Reason = "Expired" | "Near Expiry" | "Breakage" | "Spoiled" | "Rate Difference";
 type Batch = { batSrNo: number; batchNo: string; mrp: number; expiry: string; retailRate: number; gstPercent: number };
 type ClaimItem = { key: string; source: "invoice" | "manual"; invoiceId?: number; invoiceYear?: number; invoiceNo?: string; saleDetailId?: number; saleLocation?: number; itemId: number; itemName: string; batchNo: string; batSrNo: number; mrp: number; expiry: string; retailRate: number; gstPercent: number; invoiceQty1?: number; invoiceQty2?: number; quantity: number; reason: Reason | ""; reductionPercent: number };
 type Claim = { id: number; claimNo: string; claimDate: string; status: string; claimAmount: number };
 type Config = { claimDate: string; sequenceMode: string; suggestedClaimNo: string };
-const reasons: Reason[] = ["Expire", "Near Expiry", "Breakage", "Spoiled", "Rate Difference"];
+const reasons: Reason[] = ["Expired", "Near Expiry", "Breakage", "Spoiled", "Rate Difference"];
 const box = "rounded-xl border border-slate-200 bg-white p-4 shadow-sm";
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900";
 const money = (n: number) => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

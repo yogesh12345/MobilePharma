@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AppLauncher from "../components/AppLauncher";
 import {
   MOBILE_MODULES,
@@ -13,7 +13,7 @@ import CustomersPage from "./CustomersPage";
 import SalesOrderPage, { type CustomerUpdate } from "./SalesOrderPage";
 import Profile from "./Profile";
 import CustomerPortalPage from "./CustomerPortalPage";
-import { customerIdentityFromProfile, type CustomerIdentity } from "./profileForm";
+import { customerIdentityFromLinkedCustomer, customerIdentityFromProfile, type CustomerIdentity } from "./profileForm";
 
 interface MobileTabsPageProps {
   onLogout: () => void;
@@ -117,6 +117,9 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   const [salesOrderRoleAccess, setSalesOrderRoleAccess] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileStatus, setProfileStatus] = useState("");
+  const [customerPortalKey, setCustomerPortalKey] = useState(0);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [userName, setUserName] = useState(() => displayUserName(initialUserName));
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [hasCustomerProfile, setHasCustomerProfile] = useState(false);
@@ -146,13 +149,53 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   );
 
   useEffect(() => {
+    if (!menuOpen) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
     let disposed = false;
-    void API.get("/mobile/profile").then(({ data }) => {
-      if (disposed) return;
-      setHasCustomerProfile(Boolean(data.profile));
-      setCustomerIdentity(customerIdentityFromProfile(data.profile));
-      setLinkedCustomer(data.profile?.status === "LINKED" && Boolean(data.profile?.customerId));
-    }).catch(() => undefined).finally(() => { if (!disposed) setProfileLoaded(true); });
+    const loadCustomer = async () => {
+      try {
+        const { data } = await API.get("/mobile/profile");
+        if (disposed) return;
+        const profile = data.profile as Record<string, unknown> | null;
+        const linked = profile?.status === "LINKED" && Boolean(profile?.customerId);
+        setHasCustomerProfile(Boolean(profile));
+        setProfileStatus(String(profile?.status ?? ""));
+        setCustomerIdentity(customerIdentityFromProfile(profile));
+        setLinkedCustomer(linked);
+
+        if (linked) {
+          try {
+            const response = await API.get("/mobile/customer-portal/customer");
+            if (!disposed) {
+              setCustomerIdentity(customerIdentityFromLinkedCustomer(response.data?.customer, profile));
+            }
+          } catch {
+            // The profile response can still supply customer identity.
+          }
+        }
+      } catch {
+        // Keep the portal available if profile data cannot be loaded.
+      } finally {
+        if (!disposed) setProfileLoaded(true);
+      }
+    };
+    void loadCustomer();
     return () => { disposed = true; };
   }, []);
 
@@ -225,7 +268,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   const customerExperience = profileLoaded && employeeLoaded && (hasCustomerProfile || !isEmployee);
   const showCustomerHeader = customerExperience && !profileOpen && customerIdentity;
   const customerLocality = customerIdentity
-    ? [customerIdentity.city, customerIdentity.district, customerIdentity.state, customerIdentity.pin]
+    ? [customerIdentity.city, customerIdentity.pin]
         .filter(Boolean).join(", ")
     : "";
   const customerAddressLine2 = customerIdentity
@@ -236,6 +279,13 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     if (!hasModuleAccess(module)) return;
     setProfileOpen(false);
     setActiveModule(module);
+  };
+
+  const goHome = () => {
+    setActiveModule(null);
+    setProfileOpen(false);
+    setMenuOpen(false);
+    setCustomerPortalKey((current) => current + 1);
   };
 
   const openCustomerEditor = (customer: CustomerUpdate) => {
@@ -315,30 +365,38 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   return (
     <main className="min-h-dvh bg-gray-100 pb-4 text-gray-800">
       <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
-        <div className="mx-auto flex min-h-[61px] w-full max-w-3xl items-center justify-between gap-3 px-3 py-2 sm:px-4">
-          {showCustomerHeader ? (
+        <div className={`relative mx-auto flex w-full max-w-3xl justify-between gap-3 px-3 py-2 sm:px-4 ${profileOpen ? "min-h-[94px] items-start sm:min-h-[61px] sm:items-center" : "min-h-[61px] items-center"}`}>
+          <div aria-hidden="true" className={`pointer-events-none absolute inset-0 flex flex-col items-center overflow-hidden text-blue-900/25 ${profileOpen ? "justify-end pb-1 sm:justify-center sm:pb-0" : "justify-center"}`}>
+            <span className="whitespace-nowrap text-2xl font-black leading-none tracking-wide sm:text-3xl">PharmaSys</span>
+            <span className="whitespace-nowrap text-xs text-blue-400 font-bold tracking-wide sm:text-xl">Meena Agencies</span>
+          </div>
+          {profileOpen ? (
+            <h1 className="relative min-w-0 text-lg font-bold text-blue-900">Profile</h1>
+          ) : showCustomerHeader ? (
             <div className="relative min-w-0 flex-1 overflow-hidden py-0.5" aria-label="Customer identity">
-              <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center whitespace-nowrap text-4xl font-black tracking-wide text-blue-900/10 sm:text-5xl">PharmaSys</span>
               <div className="relative break-words text-blue-950">
                 <h1 className="text-base font-bold leading-snug sm:text-lg">{customerIdentity.customerName}</h1>
-                <p className="text-xs leading-snug">{customerIdentity.addressLine1}</p>
+                {customerIdentity.addressLine1 && <p className="text-xs leading-snug">{customerIdentity.addressLine1}</p>}
                 {customerAddressLine2 && <p className="text-xs leading-snug">{customerAddressLine2}</p>}
               </div>
             </div>
           ) : (
-            <h1 className="text-lg font-bold text-blue-900">PharmaSys</h1>
+            <div className="relative min-w-0 flex-1" aria-hidden="true" />
           )}
 
-          {(selectedModule || profileOpen) && (
-            <div className="truncate text-sm font-bold text-blue-900">
-              {profileOpen ? "Customer profile" :
-                MOBILE_MODULES.find((module) => module.key === selectedModule)
-                  ?.label
-              }
+          {selectedModule && !profileOpen && (
+            <div className="relative truncate text-sm font-bold text-blue-900">
+              {MOBILE_MODULES.find((module) => module.key === selectedModule)?.label}
             </div>
           )}
 
-          <div className="relative ml-auto">
+          {profileOpen && profileStatus && (
+            <div className="relative ml-auto text-right text-xs font-semibold text-blue-900 sm:text-sm">
+              <strong>{profileStatus}</strong>
+            </div>
+          )}
+
+          <div ref={menuRef} className={`relative ${profileOpen && profileStatus ? "" : "ml-auto"}`}>
             <button
               type="button"
               onClick={() => setMenuOpen((open) => !open)}
@@ -351,14 +409,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
             </button>
 
             {menuOpen && (
-              <>
-                <button
-                  type="button"
-                  className="fixed inset-0 z-40 cursor-default"
-                  aria-label="Close menu"
-                  onClick={() => setMenuOpen(false)}
-                />
-                <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-xl" role="menu">
+              <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-xl" role="menu">
                   <div className="border-b border-slate-200 px-4 py-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Logged in as</p>
                     <p className="mt-1 truncate font-bold text-slate-900">{userName}</p>
@@ -366,11 +417,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() => {
-                      setActiveModule(null);
-                      setProfileOpen(false);
-                      setMenuOpen(false);
-                    }}
+                    onClick={goHome}
                     className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"
                   >
                     <HomeIcon />
@@ -383,7 +430,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
                     className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"
                   >
                     <span aria-hidden="true">▤</span>
-                    Customer profile
+                    Profile
                   </button>
                   <button
                     type="button"
@@ -394,19 +441,18 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
                     <LogoutIcon />
                     Logout
                   </button>
-                </div>
-              </>
+              </div>
             )}
           </div>
         </div>
       </header>
 
       {profileOpen ? (
-        <Profile onBack={() => setProfileOpen(false)} onCredentialsChanged={onLogout} onUsernameChange={(name) => setUserName(displayUserName(name))} onProfileSaved={(profile) => { setActiveModule(null); setHasCustomerProfile(true); setCustomerIdentity(customerIdentityFromProfile(profile)); setLinkedCustomer(profile.status === "LINKED" && Boolean(profile.customerId)); }} />
+        <Profile onBack={() => setProfileOpen(false)} onCredentialsChanged={onLogout} onUsernameChange={(name) => setUserName(displayUserName(name))} onStatusChange={setProfileStatus} onProfileSaved={(profile) => { setActiveModule(null); setHasCustomerProfile(true); setCustomerIdentity(customerIdentityFromProfile(profile)); setLinkedCustomer(profile.status === "LINKED" && Boolean(profile.customerId)); }} />
       ) : !profileLoaded || !employeeLoaded ? (
         <div className="mx-auto max-w-3xl px-4 py-5 text-sm text-slate-600">Checking customer profile...</div>
       ) : customerExperience ? (
-        <CustomerPortalPage linked={linkedCustomer} onOpenProfile={() => setProfileOpen(true)} />
+        <CustomerPortalPage key={customerPortalKey} linked={linkedCustomer} onOpenProfile={() => setProfileOpen(true)} />
       ) : permissionsLoading ? (
         <div className="mx-auto w-full max-w-3xl px-3 py-4 text-sm font-semibold text-gray-600">
           Loading permissions...

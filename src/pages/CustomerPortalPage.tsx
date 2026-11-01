@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import API from "../services/api";
-import CompaniesPage from "./CompaniesPage";
+import CompaniesPage, { type CompaniesPageHandle } from "./CompaniesPage";
 import SalesOrderPage from "./SalesOrderPage";
 import RecentPurchases from "./RecentPurchases";
 import type { PurchaseInvoice } from "./RecentPurchases";
@@ -33,6 +33,7 @@ export default function CustomerPortalPage({ linked, onOpenProfile }: { linked: 
   const outstandingListRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const companiesRef = useRef<CompaniesPageHandle>(null);
   const visibleView = !linked && view !== "home" && view !== "companies" ? "home" : view;
 
   useEffect(() => {
@@ -70,8 +71,12 @@ export default function CustomerPortalPage({ linked, onOpenProfile }: { linked: 
   }, [visibleView, outstanding.length, error, message]);
 
   const goHome = () => { setView("home"); setError(""); setMessage(""); };
+  const footerBack = () => {
+    if (visibleView === "companies" && companiesRef.current?.backToCompaniesList()) return;
+    goHome();
+  };
 
-  return <section className={`mx-auto w-full max-w-3xl space-y-4 px-4 pt-1 ${visibleView === "credit" ? "pb-0" : visibleView === "home" ? "pb-5" : "pb-24"}`}>
+  return <section className={`mx-auto w-full max-w-3xl space-y-4 px-4 pt-1 ${visibleView === "credit" || visibleView === "companies" ? "pb-0" : visibleView === "home" ? "pb-5" : "pb-24"}`}>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {message && <p role="status" className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{message}</p>}
     {visibleView === "home" && <>
@@ -84,7 +89,7 @@ export default function CustomerPortalPage({ linked, onOpenProfile }: { linked: 
         {linked && <button type="button" onClick={() => setView("outstanding")} className={`${task} text-amber-900`}><DocumentTextIcon className="h-11 w-11" aria-hidden="true" /><span>Outstanding invoices</span></button>}
       </div>
     </>}
-    {visibleView === "companies" && <CompaniesPage compactTop canUpdateCompany={false} canUpdateRack={false} />}
+    {visibleView === "companies" && <CompaniesPage ref={companiesRef} compactTop canUpdateCompany={false} canUpdateRack={false} />}
     {visibleView === "orders" && linked && <SalesOrderPage customerProfileMode onBackToHome={goHome} />}
     {visibleView === "credit" && linked && <RaiseCreditNote />}
     {visibleView === "purchases" && linked && <RecentPurchases invoices={invoices} fillViewport />}
@@ -124,6 +129,6 @@ export default function CustomerPortalPage({ linked, onOpenProfile }: { linked: 
         </div>
       ) : <p className="text-sm text-slate-500">No outstanding invoices found.</p>}
     </>}
-    {visibleView !== "home" && visibleView !== "orders" && <div id="customer-portal-footer" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"><div className="mx-auto max-w-3xl"><button type="button" onClick={goHome} aria-label="Back to home" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 font-semibold text-blue-700 hover:bg-blue-50"><ArrowLeftIcon className="h-5 w-5" aria-hidden="true" /><span>Back</span></button></div></div>}
+    {visibleView !== "home" && visibleView !== "orders" && <div id="customer-portal-footer" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"><div className="mx-auto max-w-3xl"><button type="button" onClick={footerBack} aria-label="Back" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 font-semibold text-blue-700 hover:bg-blue-50"><ArrowLeftIcon className="h-5 w-5" aria-hidden="true" /><span>Back</span></button></div></div>}
   </section>;
 }

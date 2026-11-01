@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:web": "tsc -b && vite build --mode web --base /mobile-app/",
+    "build:mobile-domain": "tsc -b && vite build --mode web --base /",
     "lint": "eslint .",
     "preview": "npm run build:web && vite preview --base /mobile-app/"
   },

@@ -18,10 +18,20 @@ const previewRootRedirect: Plugin = {
 
 const previewApiTarget =
   process.env.MOBILEPHARMA_PREVIEW_API_TARGET || "http://127.0.0.1:8081";
+const devApiTarget =
+  process.env.MOBILEPHARMA_DEV_API_TARGET || "http://127.0.0.1:8081";
 
 export default defineConfig({
   base: process.env.VITE_BASE_PATH ?? "/",
   plugins: [react(), tailwindcss(), previewRootRedirect],
+  server: {
+    proxy: {
+      "^/(?:login|me|mobile|so|api|item|customers|stock)(?:/|$)": {
+        target: devApiTarget,
+        changeOrigin: true,
+      },
+    },
+  },
   preview: {
     proxy: {
       "^/(?!$|mobile-app(?:/|$))": {

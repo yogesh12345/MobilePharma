@@ -132,15 +132,15 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
         <p className="mt-1 text-sm text-slate-600">Double tap an invoice to view its items.{onItemSelect && " Double tap an item to add it to the claim."} On a keyboard, press Enter.</p>
       </div>
       <div ref={listRef} className={`${fillViewport ? "" : "max-h-[min(60vh,32rem)]"} overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm`}>
-        <table className="min-w-[670px] w-full border-collapse text-left text-xs sm:text-sm">
+        <table className="w-auto border-collapse text-left text-xs sm:text-sm">
           <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
             <tr>
-              <th className="whitespace-nowrap px-2 py-2 font-semibold">Invoice Date</th>
-              <th className="whitespace-nowrap px-2 py-2 font-semibold">Invoice No.</th>
-              <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Total GST</th>
-              <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Invoice Amount</th>
-              <th className="whitespace-nowrap px-2 py-2 font-semibold">Due Date</th>
-              <th className="whitespace-nowrap px-2 py-2 font-semibold">Status</th>
+              <th className="whitespace-nowrap px-1.5 py-2 font-semibold">Invoice Date</th>
+              <th className="whitespace-nowrap px-1.5 py-2 font-semibold">Invoice No.</th>
+              <th className="whitespace-nowrap px-1.5 py-2 text-right font-semibold">Total GST</th>
+              <th className="whitespace-nowrap px-1.5 py-2 text-right font-semibold">Invoice Amount</th>
+              <th className="whitespace-nowrap px-1.5 py-2 font-semibold">Due Date</th>
+              <th className="whitespace-nowrap px-1.5 py-2 font-semibold">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -178,16 +178,16 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                       }
                     }}
                   >
-                    <td className="whitespace-nowrap px-2 py-2">{date(invoice.invoiceDate)}</td>
-                    <td className="whitespace-nowrap px-2 py-2 font-semibold text-blue-900">{invoice.invoiceNo}</td>
-                    <td className="whitespace-nowrap px-2 py-2 text-right">{money(invoice.totalGST)}</td>
-                    <td className="whitespace-nowrap px-2 py-2 text-right">{money(invoice.amount)}</td>
-                    <td className="whitespace-nowrap px-2 py-2">{date(invoice.dueDate)}</td>
-                    <td className="whitespace-nowrap px-2 py-2">{invoice.status || "—"}</td>
+                    <td className="whitespace-nowrap px-1.5 py-2">{date(invoice.invoiceDate)}</td>
+                    <td className="whitespace-nowrap px-1.5 py-2 font-semibold text-blue-900">{invoice.invoiceNo}</td>
+                    <td className="whitespace-nowrap px-1.5 py-2 text-right">{money(invoice.totalGST)}</td>
+                    <td className="whitespace-nowrap px-1.5 py-2 text-right">{money(invoice.amount)}</td>
+                    <td className="whitespace-nowrap px-1.5 py-2">{date(invoice.dueDate)}</td>
+                    <td className="whitespace-nowrap px-1.5 py-2">{invoice.status || "—"}</td>
                   </tr>
                   {expanded && (
                     <tr className="border-t border-blue-200 bg-blue-50/60">
-                      <td colSpan={6} className="p-3">
+                      <td colSpan={6} className="px-2 py-3">
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <h3 className="font-semibold">Items in {invoice.invoiceNo} · {date(invoice.invoiceDate)} · {money(invoice.amount)}</h3>
                           <div className="flex shrink-0 gap-2">
@@ -198,11 +198,11 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                         {printError && <p role="alert" className="mb-2 text-sm text-red-700">{printError}</p>}
                         {loadingKey === key ? <p className="py-2 text-slate-600">Loading items...</p> : detailError ? <p role="alert" className="py-2 text-red-700">{detailError}</p> : (
                           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                            <table className="min-w-[710px] w-full text-left text-[11px]">
+                            <table className="w-auto border-collapse text-left text-[11px]">
                               <thead className="bg-slate-100 text-slate-700">
                                 <tr>
                                   {["Item Name", "Packing", "Qty+Free", "MRP", ...(onItemSelect ? ["Retail"] : []), "Batch No.", "Expiry", "GST%", "Value"].map((heading) => (
-                                    <th key={heading} className={`whitespace-nowrap px-2 py-1.5 text-xs font-semibold ${["Qty+Free", "MRP", "Retail", "GST%", "Value"].includes(heading) ? "text-right" : "text-left"}`}>{heading}</th>
+                                    <th key={heading} className={`whitespace-nowrap px-1 py-1.5 text-xs font-semibold ${["Qty+Free", "MRP", "Retail", "GST%", "Value"].includes(heading) ? "text-right" : "text-left"}`}>{heading}</th>
                                   ))}
                                 </tr>
                               </thead>
@@ -222,15 +222,15 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                                   } : undefined}
                                   onKeyDown={onItemSelect ? event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onItemSelect(invoice, item); } } : undefined}
                                 >
-                                  <td className="min-w-36 max-w-48 px-2 py-1.5 text-xs">{item.itemName || "—"}</td>
-                                  <td className="whitespace-nowrap px-2 py-1.5 text-xs">{item.packing || "—"}</td>
-                                  <td className="whitespace-nowrap px-2 py-1.5 text-right">{quantityWithFree(item.qty, item.free)}</td>
-                                  <td className="whitespace-nowrap px-2 py-1.5 text-right">{money(item.mrp)}</td>
-                                  {onItemSelect && <td className="whitespace-nowrap px-2 py-1.5 text-right">{money(item.retailRate)}</td>}
-                                  <td className="whitespace-nowrap px-2 py-1.5">{item.batchNo || "—"}</td>
-                                  <td className="whitespace-nowrap px-2 py-1.5">{item.expiry || "—"}</td>
-                                  <td className="whitespace-nowrap px-2 py-1.5 text-right">{Number(item.gstPercent || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
-                                  <td className="whitespace-nowrap px-2 py-1.5 text-right">{money(item.value)}</td>
+                                  <td className="min-w-36 max-w-48 px-1 py-1.5 text-xs">{item.itemName || "—"}</td>
+                                  <td className="whitespace-nowrap px-1 py-1.5 text-xs">{item.packing || "—"}</td>
+                                  <td className="whitespace-nowrap px-1 py-1.5 text-right">{quantityWithFree(item.qty, item.free)}</td>
+                                  <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.mrp)}</td>
+                                  {onItemSelect && <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.retailRate)}</td>}
+                                  <td className="whitespace-nowrap px-1 py-1.5">{item.batchNo || "—"}</td>
+                                  <td className="whitespace-nowrap px-1 py-1.5">{item.expiry || "—"}</td>
+                                  <td className="whitespace-nowrap px-1 py-1.5 text-right">{Number(item.gstPercent || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                                  <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.value)}</td>
                                 </tr>)}
                                 {visibleItems?.length === 0 && <tr><td colSpan={onItemSelect ? 9 : 8} className="px-2 py-3 text-slate-600">No items found for this invoice.</td></tr>}
                               </tbody>

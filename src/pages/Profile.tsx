@@ -2,14 +2,13 @@ import { useEffect, useState } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
-import FloatingLabelShow from "../components/FloatingLabelShow";
 import FloatingLabelSelect from "../components/FloatingLabelSelect";
 import { emptyForm, profileFormFromResponse, profileSavePayload } from "./profileForm";
 import type { ProfileForm } from "./profileForm";
 
 const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 
-export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCredentialsChanged }: { onBack: () => void; onUsernameChange?: (name: string) => void; onProfileSaved?: (profile: { status: string; customerId: number | null } & Record<string, unknown>) => void; onCredentialsChanged?: () => void }) {
+export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCredentialsChanged, onStatusChange }: { onBack: () => void; onUsernameChange?: (name: string) => void; onProfileSaved?: (profile: { status: string; customerId: number | null } & Record<string, unknown>) => void; onCredentialsChanged?: () => void; onStatusChange?: (status: string) => void }) {
   const [form, setForm] = useState<ProfileForm>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,11 +30,12 @@ export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCr
       if (!active) return;
       setForm(profileFormFromResponse(data.profile, data.username, data.emailId));
       setStatus(data.profile?.status ?? "");
+      onStatusChange?.(String(data.profile?.status ?? ""));
     }).catch((err) => {
       if (active) setError(err?.response?.data?.error ?? "Unable to load profile.");
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [onStatusChange]);
 
   const set = (key: keyof ProfileForm) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -63,6 +63,7 @@ export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCr
       const { data } = await API.put("/mobile/profile", payload);
       setForm(profileFormFromResponse(data.profile, data.username));
       setStatus(data.profile?.status ?? "");
+      onStatusChange?.(String(data.profile?.status ?? ""));
       onUsernameChange?.(data.username);
       onProfileSaved?.(data.profile);
       setSuccess("Profile saved successfully.");
@@ -94,36 +95,42 @@ export default function Profile({ onBack, onUsernameChange, onProfileSaved, onCr
     } finally { setResetBusy(false); }
   };
 
-  return <section className="mx-auto w-full max-w-3xl px-3 py-5 sm:px-4">
-    <div className="mb-5 flex items-start gap-3">
-      <button type="button" onClick={onBack} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Back</button>
-      <div><h2 className="text-xl font-bold text-slate-900">Customer profile</h2><p className="text-sm text-slate-600">Register the business or practice using this app.</p></div>
-    </div>
+  return <section className="mx-auto w-full max-w-3xl px-3 pt-5 pb-24 sm:px-4">
     {loading ? <p className="text-sm text-slate-600">Loading profile...</p> : <form onSubmit={save} className="space-y-5">
-      {status && <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">Registration status: <strong>{status}</strong>{status === "PENDING" && ". Awaiting customer activation or a unique GST match."}{status === "LINKED" && ". Your customer account is ready to use."}{status === "INACTIVE" && ". Contact your administrator to reactivate this profile."}</div>}
       {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {success && <p role="status" className="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">{success}</p>}
       <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <h3 className="font-bold text-slate-900">Business details</h3>
+        <h3 className="font-bold text-slate-900">Organization</h3>
         {field("customerName", "Customer / organization name", { required: true, maxLength: 150 })}
-        <div className="pt-2"><FloatingLabelSelect id="profile-category" label="Category *" value={form.category} onChange={setCategory} placeholder="Select category" options={["Retailer", "Hospital", "Doctor", "Dealer", "Subdealer"].map((category) => ({ value: category, label: category }))} className="min-h-12 rounded-xl border border-slate-300 bg-white text-slate-900" />{fieldErrors.category && <span className="block pt-1 text-sm font-medium text-red-700">{fieldErrors.category}</span>}</div>
+        <div className="pt-2"><FloatingLabelSelect id="profile-category" label="Category *" value={form.category} onChange={setCategory} placeholder="Select category" options={["Retailer", "Hospital", "Doctor", "Dealer", "Subdealer", "Institute"].map((category) => ({ value: category, label: category }))} className="min-h-12 rounded-xl border border-slate-300 bg-white text-slate-900" />{fieldErrors.category && <span className="block pt-1 text-sm font-medium text-red-700">{fieldErrors.category}</span>}</div>
         {field("addressLine1", "Address line 1", { required: true, maxLength: 200, autoComplete: "address-line1" })}
         {field("addressLine2", "Address line 2", { maxLength: 200, autoComplete: "address-line2" })}
-        <div className="grid grid-cols-2 gap-4">{field("city", "City", { required: true, maxLength: 80, autoComplete: "address-level2" })}{field("district", "District", { required: true, maxLength: 80 })}{field("state", "State", { required: true, maxLength: 80, autoComplete: "address-level1" })}{field("country", "Country", { required: true, maxLength: 80, autoComplete: "country-name" })}</div>
-        {field("pin", "PIN", { required: true, pattern: "[0-9]{6}", maxLength: 6, autoComplete: "postal-code", hint: "Six-digit postal code" })}
-        <div className="grid gap-4 sm:grid-cols-2">{field("gstNo", "GST number", { maxLength: 15 })}{field("pan", "PAN", { maxLength: 10 })}</div>
+        {field("country", "Country", { required: true, maxLength: 80, autoComplete: "country-name" })}
+        <div className="grid grid-cols-2 gap-4">{field("city", "City", { required: true, maxLength: 80, autoComplete: "address-level2" })}{field("district", "District", { required: true, maxLength: 80 })}</div>
+        <div className="grid grid-cols-2 gap-4">{field("state", "State", { required: true, maxLength: 80, autoComplete: "address-level1" })}{field("pin", "PIN", { required: true, pattern: "[0-9]{6}", maxLength: 6, autoComplete: "postal-code" })}</div>
       </div>
       <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <h3 className="font-bold text-slate-900">Contact and login</h3>
+        <h3 className="font-bold text-slate-900">Identity</h3>
+        <div className="grid gap-4 sm:grid-cols-2">{field("gstNo", "GST No.", { maxLength: 15 })}{field("pan", "PAN", { maxLength: 10 })}</div>
+        {field("drugLicNo1", "Drug Lic. No. 1", { maxLength: 80 })}
+        {field("drugLicNo2", "Drug Lic. No. 2", { maxLength: 80 })}
+        {field("foodLicenseNo", "Food License No.", { maxLength: 80 })}
+      </div>
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <h3 className="font-bold text-slate-900">Contact details</h3>
         {field("contactPerson", "Contact person", { required: true, maxLength: 120, autoComplete: "name" })}
         <div className="grid gap-4 sm:grid-cols-2">{field("mobileNo", "Mobile number", { required: true, type: "tel", maxLength: 20, autoComplete: "tel", hint: "10 digits; +91 and spaces are accepted." })}{field("whatsAppNo", "WhatsApp number", { type: "tel", maxLength: 20 })}</div>
         {field("emailId", "Email ID", { required: true, type: "email", maxLength: 150, autoComplete: "email" })}
-        <div className="space-y-1.5 pt-2"><FloatingLabelShow id="profile-username" label="Login name" value={form.username} className={`${inputClass} bg-slate-100`} /><span className="block text-xs text-slate-500">Use Reset login credentials to change your login name or password.</span></div>
         <label className="block space-y-1.5"><span className="text-sm font-semibold text-slate-700">Remark</span><textarea className={inputClass} rows={3} maxLength={2000} value={form.remark} onChange={set("remark")} /></label>
       </div>
       <button type="submit" disabled={saving} className="w-full rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-60">{saving ? "Saving..." : status ? "Save profile" : "Register profile"}</button>
       <button type="button" onClick={() => { setResetUsername(form.username); setResetError(""); setResetOpen(true); }} className="w-full rounded-xl border border-blue-700 bg-white px-4 py-3 font-semibold text-blue-700">Reset login credentials</button>
     </form>}
+    <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur">
+      <div className="mx-auto max-w-3xl">
+        <button type="button" onClick={onBack} className="min-h-11 rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700">Back</button>
+      </div>
+    </footer>
     {resetOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><form onSubmit={resetCredentials} role="dialog" aria-modal="true" aria-label="Reset login credentials" className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-xl"><h3 className="text-lg font-bold text-slate-900">Reset login credentials</h3><p className="text-sm text-slate-600">Enter your current password. You will sign in again after the change.</p><label className="block text-sm font-semibold">Login name<input className={inputClass} value={resetUsername} onChange={e => setResetUsername(e.target.value)} required pattern="[A-Za-z0-9._-]{3,40}" maxLength={40} /></label><label className="block text-sm font-semibold">Current password<input className={inputClass} type="password" autoComplete="current-password" value={presentPassword} onChange={e => setPresentPassword(e.target.value)} required /></label><label className="block text-sm font-semibold">New password<input className={inputClass} type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={8} maxLength={72} /></label><label className="block text-sm font-semibold">Confirm new password<input className={inputClass} type="password" autoComplete="new-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required /></label>{resetError && <p role="alert" className="text-sm text-red-700">{resetError}</p>}<div className="flex justify-end gap-2"><button type="button" className="rounded-lg border px-4 py-2" onClick={() => setResetOpen(false)}>Cancel</button><button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white disabled:opacity-60" disabled={resetBusy}>{resetBusy ? "Saving..." : "Reset credentials"}</button></div></form></div>}
   </section>;
 }
