@@ -779,7 +779,7 @@ const GenericAutoComplete = React.forwardRef<
             >
               {salesOrderItemLayout ? <>
                 <div className="flex items-baseline justify-between gap-3"><span className="min-w-0 truncate font-medium">{item.label1}</span><span className={`shrink-0 truncate text-xs ${textColor}`}>{item.label2}</span></div>
-                <div className={`mt-1 flex items-center justify-between gap-2 text-xs ${textColor}`}><span className="truncate">{item.label3}</span><span className="truncate">{item.label4}</span>{showLabel5 && <span className="truncate">{item.label5}</span>}<span className={`shrink-0 font-semibold ${isHighlighted ? "text-white" : "text-emerald-700"}`}>{item.label6}</span></div>
+                <div className={`mt-1 flex items-center justify-between gap-2 text-xs ${textColor}`}><span className="truncate">{item.label3}</span>{showLabel5 && <span className="truncate">{item.label5}</span>}<span className={`shrink-0 font-semibold ${isHighlighted ? "text-white" : "text-emerald-700"}`}>{item.label6}</span></div>
               </> : <>
                 <div className="font-medium">{item.label1}</div>
                 <div className={`${textColor} break-words`}>

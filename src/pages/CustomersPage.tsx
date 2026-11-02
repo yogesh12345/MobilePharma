@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 
@@ -61,6 +61,8 @@ export default function CustomersPage({
 }: CustomersPageProps) {
   const [areas, setAreas] = useState<Area[]>([]);
   const [expandedArea, setExpandedArea] = useState<string>("");
+  const [areaSearch, setAreaSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [selected, setSelected] = useState<Customer | null>(null);
   const [mobile, setMobile] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -329,8 +331,8 @@ export default function CustomersPage({
             </div>
           )}
 
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-lg backdrop-blur">
-            <div className="mx-auto flex w-full max-w-3xl justify-end gap-2">
+          <div className="mt-5 border-t border-slate-200 pt-4">
+            <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
               onClick={() => returnToSourceView()}
@@ -389,89 +391,45 @@ export default function CustomersPage({
       {loading ? (
         <div className="rounded-lg bg-white p-4 text-sm shadow-sm">Loading customers...</div>
       ) : (
-        <div className="space-y-3">
-          {areas.map((area, areaIndex) => {
-            const key = `${area.AreaCode}|${area.AreaName}`;
-            const open = expandedArea === key;
-            return (
-              <section
-                key={key}
-                className={`overflow-hidden rounded-xl border shadow-sm ${
-                  areaIndex % 2 === 0
-                    ? "border-blue-200 bg-white"
-                    : "border-indigo-200 bg-indigo-50/40"
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setExpandedArea(open ? "" : key)}
-                  className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-blue-100 ${
-                    areaIndex % 2 === 0 ? "bg-blue-50" : "bg-indigo-100/70"
-                  }`}
-                >
-                  <span className="font-bold text-blue-900">
-                    {open ? "▼" : "▶"} {area.AreaName}
-                  </span>
-                  <span className="text-sm font-semibold tabular-nums text-blue-700">
-                    {area.CustomerCount}
-                  </span>
-                </button>
-
-                {open &&
-                  area.customers.map((customer, customerIndex) => {
-                    const address = [
-                      customer.AddressLine1,
-                      customer.AddressLine2,
-                      customer.AddressLine3,
-                    ].filter((x) => String(x || "").trim());
-
-                    return (
-                      <button
-                        key={customer.id}
-                        ref={(element) => {
-                          customerButtonRefs.current[customer.id] = element;
-                        }}
-                        type="button"
-                        onClick={() => openCustomer(customer)}
-                        className={`block w-full border-t border-slate-200 px-3 py-3 text-left transition-colors hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
-                          focusCustomerId === customer.id
-                            ? "bg-amber-50 ring-2 ring-inset ring-amber-300"
-                            : customerIndex % 2 === 0
-                              ? "bg-white"
-                              : "bg-sky-50/70"
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                          <span className="font-semibold text-gray-900">{customer.CustomerName}</span>
-                          <span className="flex flex-wrap gap-x-3 text-xs font-semibold">
-                            {customer.CashSales !== 0 && (
-                              <span className="text-emerald-700">Cash ₹{amount(customer.CashSales)}</span>
-                            )}
-                            {customer.CreditSales !== 0 && (
-                              <span className="text-blue-700">Credit ₹{amount(customer.CreditSales)}</span>
-                            )}
-                          </span>
-                        </div>
-
-                        {address.length > 0 && (
-                          <div className="mt-1 text-xs leading-4 text-gray-500">
-                            {address.map((line, i) => (
-                              <div key={i}>{line}</div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
-                          {customer.MobileNo && <span>Mob: {customer.MobileNo}</span>}
-                          {customer.WhatsappNo && <span>WA: {customer.WhatsappNo}</span>}
-                          {customer.EmailID && <span>{customer.EmailID}</span>}
-                        </div>
-                      </button>
-                    );
-                  })}
-              </section>
-            );
-          })}
+        <div className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
+          <div className="border-b border-blue-100 bg-blue-50 p-3">
+            <input type="search" value={areaSearch} onChange={event => setAreaSearch(event.target.value)} placeholder="Search areas" aria-label="Search areas" className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          </div>
+          <div className="max-h-[calc(100dvh-14rem)] overflow-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-blue-100 text-blue-950"><tr><th className="px-3 py-3">Area</th><th className="px-3 py-3 text-right">Customers</th></tr></thead>
+              <tbody>
+                {areas.filter(area => `${area.AreaName} ${area.AreaCode}`.toLowerCase().includes(areaSearch.trim().toLowerCase())).map((area, areaIndex) => {
+                  const key = `${area.AreaCode}|${area.AreaName}`;
+                  const open = expandedArea === key;
+                  const searchTerm = customerSearch.trim().toLowerCase();
+                  const visibleCustomers = open ? area.customers.filter(customer => [customer.CustomerName, customer.MobileNo, customer.WhatsappNo, customer.GstNo].some(value => String(value || "").toLowerCase().includes(searchTerm))) : [];
+                  return <Fragment key={key}>
+                    <tr className={`${open ? "bg-blue-100" : areaIndex % 2 ? "bg-sky-50/70" : "bg-white"} border-t border-blue-100 hover:bg-blue-50`}>
+                      <td className="p-0"><button type="button" aria-expanded={open} onClick={() => { setExpandedArea(open ? "" : key); setCustomerSearch(""); }} className="w-full px-3 py-3 text-left font-bold text-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{open ? "▼" : "▶"} {area.AreaName}</button></td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-blue-700">{area.CustomerCount}</td>
+                    </tr>
+                    {open && <tr><td colSpan={2} className="p-0">
+                      <div className="border-t border-blue-100 bg-white px-3 py-3">
+                        <input type="search" value={customerSearch} onChange={event => setCustomerSearch(event.target.value)} placeholder={`Search customers in ${area.AreaName}`} aria-label={`Search customers in ${area.AreaName}`} className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                      </div>
+                      {visibleCustomers.map((customer, customerIndex) => {
+                        const address = [customer.AddressLine1, customer.AddressLine2, customer.AddressLine3].filter(value => String(value || "").trim());
+                        return <button key={customer.id} ref={element => { customerButtonRefs.current[customer.id] = element; }} type="button" onClick={() => openCustomer(customer)} className={`block w-full border-t border-slate-200 px-3 py-3 text-left transition-colors hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${focusCustomerId === customer.id ? "bg-amber-50 ring-2 ring-inset ring-amber-300" : customerIndex % 2 ? "bg-sky-50/70" : "bg-white"}`}>
+                          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><span className="font-semibold text-gray-900">{customer.CustomerName}</span><span className="flex flex-wrap gap-x-3 text-xs font-semibold">{customer.CashSales !== 0 && <span className="text-emerald-700">Cash ₹{amount(customer.CashSales)}</span>}{customer.CreditSales !== 0 && <span className="text-blue-700">Credit ₹{amount(customer.CreditSales)}</span>}</span></div>
+                          {address.length > 0 && <div className="mt-1 text-xs leading-4 text-gray-500">{address.map((line, index) => <div key={index}>{line}</div>)}</div>}
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">{customer.MobileNo && <span>Mob: {customer.MobileNo}</span>}{customer.WhatsappNo && <span>WA: {customer.WhatsappNo}</span>}{customer.EmailID && <span>{customer.EmailID}</span>}</div>
+                        </button>;
+                      })}
+                      {visibleCustomers.length === 0 && <p className="border-t border-blue-100 bg-white px-3 py-5 text-sm text-slate-600">No customers match this search.</p>}
+                    </td></tr>}
+                  </Fragment>;
+                })}
+                {areas.length > 0 && !areas.some(area => `${area.AreaName} ${area.AreaCode}`.toLowerCase().includes(areaSearch.trim().toLowerCase())) && <tr><td colSpan={2} className="px-3 py-5 text-slate-600">No areas match this search.</td></tr>}
+                {areas.length === 0 && <tr><td colSpan={2} className="px-3 py-5 text-slate-600">No areas found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

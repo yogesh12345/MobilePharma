@@ -22,7 +22,7 @@ export function MobileAccessProvider({ children }: { children: ReactNode }) {
    const accessData = response.data;
    setData(accessData); setError("");
    setSelectedId(current => {
-    const next = accessData.customers.some(customer => customer.customerId === current) ? current : accessData.customers.length === 1 ? accessData.customers[0].customerId : null;
+    const next = accessData.customers.some(customer => customer.customerId === current) ? current : accessData.account.kind === "INTERNAL" ? null : accessData.customers.length === 1 ? accessData.customers[0].customerId : null;
     setMobileCustomerId(next); return next;
    });
   } catch (error: unknown) { if (!mounted.current || version !== requestVersion.current) return; setData(null); setMobileCustomerId(null); setSelectedId(null); setError(mobileAccessErrorMessage(error)); }

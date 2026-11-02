@@ -106,9 +106,9 @@ export default function ItemLocationPage({
       return;
     }
 
-    if (selectedItem) {
-      setRackNumber(selectedItem.RackNumber ?? "");
-    }
+    setSelectedItem(null);
+    setRackNumber("");
+    setItemQuery("");
     setMessage(null);
     focusAndSelectItemName();
   };
@@ -127,12 +127,40 @@ export default function ItemLocationPage({
       setLoadingItem(true);
       setMessage(null);
       if (queryText !== undefined) setItemQuery(queryText);
-      const response = await API.get<ItemDetails>(`/itemdetail/${numericItemId}`);
-      const details = response.data;
-      setSelectedItem(details);
-      setRackNumber(details.RackNumber ?? "");
-      if (queryText === undefined && details.ItemName) {
-        setItemQuery(details.ItemName);
+      const unwrap = (value: unknown): Partial<ItemDetails> => {
+        if (!value || typeof value !== "object") return {};
+        const record = value as Record<string, unknown>;
+        return (record.Item ?? record.item ?? (Array.isArray(value) ? value[0] : value)) as Partial<ItemDetails>;
+      };
+      const [basicResponse, detailedResponse] = await Promise.allSettled([
+        API.get<unknown>(`/item/${numericItemId}`),
+        API.get<unknown>(`/itemdetail/${numericItemId}`),
+      ]);
+      const basic = basicResponse.status === "fulfilled" ? unwrap(basicResponse.value.data) : {};
+      const detailed = detailedResponse.status === "fulfilled" ? unwrap(detailedResponse.value.data) : {};
+      const details = {
+        ...basic,
+        ...detailed,
+        ItemName: detailed.ItemName || basic.ItemName,
+        Packing: detailed.Packing || basic.Packing,
+        BoxPack: detailed.BoxPack || basic.BoxPack,
+        CompShort: detailed.CompShort || basic.CompShort,
+        RackNumber: detailed.RackNumber ?? basic.RackNumber,
+      };
+      if (!details.ItemName) throw new Error("Item details were returned without an item name.");
+      const selectedDetails: ItemDetails = {
+        id: Number(details.id ?? numericItemId),
+        ItemName: details.ItemName,
+        Packing: details.Packing ?? "",
+        BoxPack: details.BoxPack ?? "",
+        CompName: details.CompName || details.CompShort || "",
+        CompShort: details.CompShort ?? "",
+        RackNumber: details.RackNumber ?? "",
+      };
+      setSelectedItem(selectedDetails);
+      setRackNumber(selectedDetails.RackNumber);
+      if (queryText === undefined) {
+        setItemQuery(selectedDetails.ItemName);
       }
     } catch (error) {
       setSelectedItem(null);
@@ -144,7 +172,7 @@ export default function ItemLocationPage({
   };
 
   const handleItemSelect = async (item: AutoCompleteItem) => {
-    await loadItemDetails(item.id);
+    await loadItemDetails(item.id, item.label1);
   };
 
   // A company item can request direct Rack editing. Load that item automatically
@@ -192,7 +220,7 @@ export default function ItemLocationPage({
   const rackInputClass = canUpdateRack ? editableClass : readOnlyClass;
 
   return (
-    <main className="min-h-dvh bg-gray-100 text-gray-800">
+    <main className="min-h-dvh bg-transparent text-gray-800">
       {showHeader && (
         <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-3 py-3 sm:px-4">
@@ -359,8 +387,8 @@ export default function ItemLocationPage({
                 </div>
               )}
 
-              <div className="fixed inset-x-0 bottom-0 z-30 border-t border-blue-100 bg-white/95 px-3 py-3 shadow-lg backdrop-blur">
-                <div className="mx-auto flex w-full max-w-3xl flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="border-t border-blue-100 pt-4">
+                <div className="flex flex-wrap justify-end gap-3">
                 <button
                   type="button"
                   onClick={handleCancel}

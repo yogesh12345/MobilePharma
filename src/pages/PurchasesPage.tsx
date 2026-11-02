@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import API from "../services/api";
 
 type PurchaseInvoice = {
@@ -35,6 +35,7 @@ type PurchaseItem = {
 };
 
 interface PurchasesPageProps {
+  tableView?: boolean;
   onEditRack?: (item: {
     id: number;
     ItemName: string;
@@ -157,6 +158,7 @@ const formatQtyPair = (qty1: number, qty2: number) => {
 };
 
 export default function PurchasesPage({
+  tableView = false,
   onEditRack,
   canUpdateRack = true,
   focusInvoiceId = null,
@@ -352,7 +354,7 @@ export default function PurchasesPage({
   }, [focusItemId, focusTranId, focusRequestKey, items]);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
+    <div className={`mx-auto w-full px-3 py-4 sm:px-4 ${tableView ? "max-w-5xl" : "max-w-3xl"}`}>
       {message && (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {message}
@@ -393,7 +395,42 @@ export default function PurchasesPage({
                   </span>
                 </button>
 
-                {expanded && (
+                {expanded && tableView && (
+                  <div className="max-h-[calc(100dvh-16rem)] overflow-auto">
+                    <table className="w-full min-w-[560px] table-fixed border-collapse text-left text-xs sm:text-sm">
+                      <thead className="sticky top-0 z-10 bg-blue-100 text-blue-900 shadow-[0_1px_0_#bfdbfe]">
+                        <tr>
+                          <th scope="col" colSpan={3} className="px-2 pb-0.5 pt-2 font-semibold">Invoice Date</th>
+                          <th scope="col" colSpan={3} className="px-2 pb-0.5 pt-2 font-semibold">Invoice No.</th>
+                          <th scope="col" colSpan={3} className="px-2 pb-0.5 pt-2 font-semibold">Gr. No.</th>
+                          <th scope="col" colSpan={3} className="px-2 pb-0.5 pt-2 font-semibold">Received On</th>
+                        </tr>
+                        <tr>
+                          <th scope="col" colSpan={6} className="px-2 pb-2 pt-0.5 font-semibold">Supplier Name</th>
+                          <th scope="col" colSpan={3} className="px-2 pb-2 pt-0.5 font-semibold">No. of Items</th>
+                          <th scope="col" colSpan={3} className="px-2 pb-2 pt-0.5 text-right font-semibold">Invoice Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {month.invoices.map((invoice, index) => <Fragment key={invoice.id}>
+                          <tr className={`border-t border-blue-200 ${selectedInvoice?.id === invoice.id ? "bg-amber-50" : index % 2 ? "bg-sky-50/70" : "bg-white"}`}>
+                            <td colSpan={3} className="px-2 pb-0.5 pt-2">{formatDate(invoice.InvoiceDate)}</td>
+                            <td colSpan={3} className="px-2 pb-0.5 pt-2"><button type="button" onClick={() => void openInvoice(invoice)} className="break-all text-left font-semibold text-blue-700 underline-offset-2 hover:underline">{invoice.InvoiceNo}</button></td>
+                            <td colSpan={3} className="px-2 pb-0.5 pt-2">{invoice.GrNo || "-"}</td>
+                            <td colSpan={3} className="px-2 pb-0.5 pt-2">{formatDate(invoice.ReceivedOn)}</td>
+                          </tr>
+                          <tr className={selectedInvoice?.id === invoice.id ? "bg-amber-50" : index % 2 ? "bg-sky-50/70" : "bg-white"}>
+                            <td colSpan={6} className="px-2 pb-2 pt-0.5">{invoice.SupplierName}</td>
+                            <td colSpan={3} className="px-2 pb-2 pt-0.5 tabular-nums">{invoice.NumItems}</td>
+                            <td colSpan={3} className="px-2 pb-2 pt-0.5 text-right tabular-nums">₹{money(invoice.InvoiceAmount)}</td>
+                          </tr>
+                          {selectedInvoice?.id === invoice.id && <tr><td colSpan={12} className="p-0">{renderInvoiceItems(invoice)}</td></tr>}
+                        </Fragment>)}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {expanded && !tableView && (
                   <div>
                     {month.invoices.map((invoice, index) => {
                       const selected = selectedInvoice?.id === invoice.id;

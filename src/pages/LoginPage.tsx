@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import API, { setApiToken } from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
+import AnimatedBackground from "../components/AnimatedBackground";
 import { removeStoredPermissions, setStoredToken } from "../services/storage";
 
 interface LoginPageProps {
@@ -65,7 +66,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   if (verification) return <MobileVerification mode={verification} onBack={() => setVerification(null)} />;
 
   return (
-    <main className="min-h-dvh bg-slate-100 px-4 py-8 flex items-center justify-center">
+    <main className="mobile-app-shell min-h-dvh px-4 py-8 flex items-center justify-center">
+      <AnimatedBackground />
       <section className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
         <div className="bg-slate-900 px-6 py-6 text-white">
           <h1 className="text-2xl font-bold">PharmaSys</h1>

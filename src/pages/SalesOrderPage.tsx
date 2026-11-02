@@ -866,17 +866,22 @@ export default function SalesOrderPage({
   };
 
   const registerSelectedItem = () => {
-    if (selectedOrder && !canEditSOStatus(selectedOrder.header?.Status)) return;
-    if (loadingSelectedItem) return;
+    if (selectedOrder && !canEditSOStatus(selectedOrder.header?.Status)) return false;
+    if (loadingSelectedItem) return false;
     if (!selectedItem) {
       setMessage("Select an item first.");
-      return;
+      return false;
     }
     const q1 = toNumber(qty1);
     const q2 = toNumber(qty2);
     if (q1 <= 0 && q2 <= 0) {
       setMessage("Enter Qty or Free quantity.");
-      return;
+      return false;
+    }
+    if (q2 > q1) {
+      setMessage("Free quantity cannot be greater than Qty.");
+      freeInputRef.current?.focus();
+      return false;
     }
 
     setCart((current) => {
@@ -922,6 +927,7 @@ export default function SalesOrderPage({
     setShowCart(!customerProfileMode && itemSourceTab !== "companies");
     if (itemSourceTab === "companies") setReviewAddingItem(true);
     setMessage("");
+    return true;
   };
 
   const statusForAction = (mode: "save" | "submit" | "update") => {
@@ -960,6 +966,10 @@ export default function SalesOrderPage({
     const customer = selectedCustomer ?? selectedOrder?.customer;
     if (!customer || cart.length === 0) {
       setMessage(customerProfileMode ? "Add at least one item." : "Select a customer and add at least one item.");
+      return;
+    }
+    if (cart.some((item) => toNumber(item.Qty2) > toNumber(item.Qty1))) {
+      setMessage("Free quantity cannot be greater than Qty. Update the item before saving.");
       return;
     }
 
@@ -1378,7 +1388,7 @@ export default function SalesOrderPage({
       </div>
       <div className="mt-1 flex items-center justify-between gap-2 text-xs font-medium text-slate-600">
         <span className="truncate">{item.CompShort || ""}</span>
-        <span className="truncate">Rack: {item.RackNumber || "-"}</span>
+        {/* <span className="truncate">Rack: {item.RackNumber || "-"}</span> */}
         <span className="truncate">MRP: {money(item.MRP)}</span>
         {item.StockAvailable && <span className="shrink-0 font-semibold text-emerald-700">Available</span>}
       </div>
@@ -1388,15 +1398,13 @@ export default function SalesOrderPage({
   const renderSelectedItemEditor = (reviewMode: boolean) =>
     selectedItem ? (
       <div ref={selectedItemEditorRef} className="relative mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 pb-14">
-        <div className="flex min-w-0 items-baseline gap-2 pr-10">
-          <div className="truncate font-bold text-slate-900">{selectedItem.ItemName}</div>
-          <div className="shrink-0 truncate text-xs font-semibold text-slate-600">{selectedItem.Packing}</div>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 pr-10">
+          <span className="font-bold text-slate-900">{selectedItem.ItemName}</span>
+          <span className="text-xs font-semibold text-slate-600">{selectedItem.Packing}</span>
+          <span className="text-sm font-semibold text-slate-700">({loadingSelectedItem ? "..." : selectedItem.CompShort || "-"})</span>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold text-slate-700">
-          <span>Company: {loadingSelectedItem ? "..." : selectedItem.CompShort || "-"}</span>
-          <span>Location: {loadingSelectedItem ? "..." : selectedItem.Location || "-"}</span>
-          <span>Rack: {loadingSelectedItem ? "..." : selectedItem.RackNumber || "-"}</span>
+        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs font-semibold text-slate-700">
           <span>MRP: {loadingSelectedItem ? "..." : money(selectedItem.MRP)}</span>
           <span>Scheme: {loadingSelectedItem ? "..." : selectedItem.Scheme || "-"}</span>
         </div>
@@ -1433,6 +1441,9 @@ export default function SalesOrderPage({
             className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base"
           />
         </div>
+        {toNumber(qty2) > toNumber(qty1) && (
+          <p role="alert" className="mt-2 text-sm font-medium text-red-700">Free quantity cannot be greater than Qty.</p>
+        )}
         <div className="absolute bottom-2 right-2 flex gap-2">
           <button
             type="button"
@@ -1453,8 +1464,7 @@ export default function SalesOrderPage({
           <button
             type="button"
             onClick={() => {
-              registerSelectedItem();
-              if (reviewMode && itemSourceTab !== "companies") setReviewAddingItem(false);
+              if (registerSelectedItem() && reviewMode && itemSourceTab !== "companies") setReviewAddingItem(false);
             }}
             disabled={loadingSelectedItem}
             className="grid h-10 w-10 place-items-center rounded-full bg-blue-600 text-xl font-bold text-white shadow-sm disabled:cursor-wait disabled:opacity-50"

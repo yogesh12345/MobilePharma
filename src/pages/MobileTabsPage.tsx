@@ -4,6 +4,8 @@ import { useMobileAccess } from "../context/mobileAccess";
 import MobileTeam from "./MobileTeam";
 import MobileVerification from "./MobileVerification";
 import AppLauncher from "../components/AppLauncher";
+import AnimatedBackground from "../components/AnimatedBackground";
+import orgLogo from "../assets/OrgLogo.png";
 import {
   MOBILE_MODULES,
   type MobileModule,
@@ -18,7 +20,6 @@ import SalesOrderPage, { type CustomerUpdate } from "./SalesOrderPage";
 import Profile from "./Profile";
 import CustomerPortalPage from "./CustomerPortalPage";
 import { customerIdentityFromLinkedCustomer, customerIdentityFromProfile, type CustomerIdentity } from "./profileForm";
-import orgLogo from "../assets/OrgLogo.png";
 
 interface MobileTabsPageProps {
   onLogout: () => void;
@@ -222,8 +223,8 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     (hasModuleAccess(activeModule) || (activeModule === "rack" && rackTarget))
       ? activeModule
       : null;
-  const customerExperience = Boolean(access.data && (access.data.account.kind !== "INTERNAL" || access.data.customers.length > 0 || access.data.taskPermissions != null));
-  const needsCustomerSelection = Boolean(access.data?.customers.length && !access.customer);
+  const customerExperience = Boolean(access.data);
+  const needsCustomerSelection = Boolean(access.data?.account.kind === "EXTERNAL" && access.data.customers.length > 0 && !access.customer);
   const showCustomerHeader = customerExperience && !profileOpen && customerIdentity;
   const customerLocality = customerIdentity
     ? [customerIdentity.city, customerIdentity.pin]
@@ -323,7 +324,12 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   };
 
   return (
-    <main className="min-h-dvh bg-gray-100 pb-4 text-gray-800">
+    <main className="mobile-app-shell min-h-dvh pb-4 text-gray-800">
+      <AnimatedBackground />
+      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 bottom-0 top-[61px] z-20 flex flex-col items-center justify-center gap-2 overflow-hidden pb-16 opacity-[0.14]">
+        <img src={orgLogo} alt="" className="h-28 w-28 object-contain sm:h-36 sm:w-36" />
+        <span className="text-center text-xl font-bold tracking-wide text-slate-700 sm:text-2xl">Meena Agencies</span>
+      </div>
       <header className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50/95 shadow-sm backdrop-blur">
         <div className={`relative mx-auto flex w-full max-w-3xl justify-between gap-3 px-3 py-2 sm:px-4 ${profileOpen ? "min-h-[94px] items-start sm:min-h-[61px] sm:items-center" : "min-h-[61px] items-center"}`}>
           <div aria-hidden="true" className={`pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden text-blue-900/25 ${profileOpen ? "pt-8 sm:pt-0" : ""}`}>
@@ -384,7 +390,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
                   </button>
                   {access.can("profile") && <button type="button" role="menuitem" onClick={() => { goHome();setProfileOpen(true); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><IdentificationIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Our Profile</button>}
                   {access.data?.account.kind === "EXTERNAL" && access.can("admin") && <button type="button" role="menuitem" onClick={() => { goHome();setTeamOpen(true); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><UsersIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Our Users</button>}
-                  {access.data?.account.kind === "INTERNAL" && access.data.customers.length > 1 && <button type="button" role="menuitem" onClick={() => { goHome();access.selectCustomer(null); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><ArrowsRightLeftIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Change customer</button>}
+                  {access.data?.account.kind === "INTERNAL" && Boolean(access.customer) && <button type="button" role="menuitem" onClick={() => { goHome();access.selectCustomer(null); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><ArrowsRightLeftIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Internal tasks and customers</button>}
                   <button type="button" role="menuitem" onClick={() => { goHome();setCredentialsOpen(true); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><KeyIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Login credentials</button>
                   <button
                     type="button"
@@ -400,11 +406,6 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
           </div>
         </div>
       </header>
-
-      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 bottom-0 top-[61px] z-20 flex flex-col items-center justify-center gap-2 overflow-hidden pb-16 opacity-[0.14]">
-        <img src={orgLogo} alt="" className="h-28 w-28 object-contain sm:h-36 sm:w-36" />
-        <span className="text-center text-xl font-bold tracking-wide text-slate-700 sm:text-2xl">Meena Agencies</span>
-      </div>
 
       {access.loading ? <p className="p-5 text-center text-slate-600">Loading your account...</p> : access.error ? <div role="alert" className="mx-auto max-w-lg space-y-3 p-5"><p>{access.error}</p><div className="flex flex-wrap gap-4"><button type="button" className="text-blue-700 underline" onClick={() => void access.reload()}>Retry</button><button type="button" className="text-blue-700 underline" onClick={onLogout}>Sign in again</button></div></div> : credentialsOpen ? <MobileVerification mode="credentials" onBack={goHome} onComplete={onLogout} /> : needsCustomerSelection ? <section className="mx-auto max-w-3xl space-y-3 p-5"><h1 className="text-xl font-bold">Select a customer</h1><p className="text-sm text-slate-600">Choose an assigned customer to continue.</p>{access.data?.customers.map(customer => <button className="block w-full rounded-xl border border-blue-200 bg-white p-4 text-left hover:bg-blue-50" key={customer.customerId} onClick={() => { access.selectCustomer(customer.customerId);goHome(); }}><span className="block font-bold">{customer.customerName}</span><span className="text-sm text-slate-600">{customer.gstNo}</span></button>)}</section> : teamOpen ? <MobileTeam onBack={goHome} /> : profileOpen && access.can("profile") ? (
         <Profile onOpenCredentials={() => { setProfileOpen(false);setCredentialsOpen(true); }} onBack={() => setProfileOpen(false)} onCredentialsChanged={onLogout} onProfileSaved={(profile) => { setActiveModule(null);  setCustomerIdentityState({ customerId:access.customer?.customerId ?? 0,identity:customerIdentityFromProfile(profile) }); }} />
