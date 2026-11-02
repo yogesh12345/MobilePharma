@@ -125,7 +125,7 @@ export const MOBILE_MODULES: LauncherModule[] = [
   },
   {
     key: "salesOrders",
-    label: "Sales Order",
+    label: "Orders",
     visible: true,
     enabled: true,
     positionClass: "justify-self-start",

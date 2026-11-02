@@ -34,7 +34,7 @@ export function MobileAccessProvider({ children }: { children: ReactNode }) {
  const can = (permission: string) => {
   if (error || !data?.account.active) return false;
   if (data.account.kind === "PENDING") return permission === "catalog";
-  if (!customer) return false;
+  if (!customer) return data.account.kind === "INTERNAL" && Boolean(data.taskPermissions?.includes(permission));
   return customer.owner || customer.permissions.includes(permission) || (permission !== "profile" && customer.permissions.includes("admin"));
  };
  return <MobileAccessContext.Provider value={{ data, customer, loading, error, can, selectCustomer, reload }}>{children}</MobileAccessContext.Provider>;

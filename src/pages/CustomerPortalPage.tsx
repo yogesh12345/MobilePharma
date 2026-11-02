@@ -26,7 +26,7 @@ const outstandingStatus = (invoice: OutstandingInvoice): "PENDING" | "PART" => {
   return paid <= 0.000001 ? "PENDING" : "PART";
 };
 
-const task = "flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl text-center text-sm font-semibold transition hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:text-base";
+const task = "flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl text-center text-sm font-semibold transition hover:bg-white/70 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:text-base";
 
 export default function CustomerPortalPage({ linked }: { linked: boolean }) {
   const access = useMobileAccess();
@@ -83,14 +83,14 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {message && <p role="status" className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{message}</p>}
     {visibleView === "home" && <>
-      {!linked && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Your account is awaiting review. You can browse companies and items while the system administrator reviews your access.</div>}
+      {!linked && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{access.data?.account.kind === "INTERNAL" ? "No active customers are assigned to your person record. Contact your administrator to check Person for Customer assignments." : "Your account is awaiting review. You can browse companies and items while the system administrator reviews your access."}</div>}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         {access.can("catalog") && <button type="button" onClick={() => setView("companies")} className={`${task} text-blue-900`}><BuildingOffice2Icon className="h-11 w-11" aria-hidden="true" /><span>Companies</span></button>}
-        {access.can("orders") && <button type="button" onClick={() => setView("orders")} className={`${task} text-violet-900`}><ClipboardDocumentListIcon className="h-11 w-11" aria-hidden="true" /><span>Sales Order</span></button>}
-        {access.can("credit_notes") && <button type="button" onClick={() => setView("credit")} className={`${task} text-rose-900`}><ReceiptRefundIcon className="h-11 w-11" aria-hidden="true" /><span>Raise credit note</span></button>}
-        {access.can("invoices") && <button type="button" onClick={() => setView("purchases")} className={`${task} text-emerald-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>Recent purchases</span></button>}
-        {access.can("outstanding") && <button type="button" onClick={() => setView("outstanding")} className={`${task} text-amber-900`}><DocumentTextIcon className="h-11 w-11" aria-hidden="true" /><span>Outstanding invoices</span></button>}
-      {access.can("arrivals") && <button type="button" onClick={() => setView("arrivals")} className={`${task} text-teal-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>New arrivals and schemes</span></button>}
+        {access.can("orders") && <button type="button" disabled={!linked} title={!linked ? "A mobile customer assignment is required" : undefined} onClick={() => setView("orders")} className={`${task} text-violet-900`}><ClipboardDocumentListIcon className="h-11 w-11" aria-hidden="true" /><span>Orders</span></button>}
+        {access.can("credit_notes") && <button type="button" disabled={!linked} title={!linked ? "A mobile customer assignment is required" : undefined} onClick={() => setView("credit")} className={`${task} text-rose-900`}><ReceiptRefundIcon className="h-11 w-11" aria-hidden="true" /><span>Credit Notes</span></button>}
+        {access.can("invoices") && <button type="button" disabled={!linked} title={!linked ? "A mobile customer assignment is required" : undefined} onClick={() => setView("purchases")} className={`${task} text-emerald-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>Recent purchases</span></button>}
+        {access.can("outstanding") && <button type="button" disabled={!linked} title={!linked ? "A mobile customer assignment is required" : undefined} onClick={() => setView("outstanding")} className={`${task} text-amber-900`}><DocumentTextIcon className="h-11 w-11" aria-hidden="true" /><span>Outstanding</span></button>}
+      {access.can("arrivals") && <button type="button" disabled={!linked} title={!linked ? "A mobile customer assignment is required" : undefined} onClick={() => setView("arrivals")} className={`${task} text-teal-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>New arrivals and schemes</span></button>}
       </div>
     </>}
     {visibleView === "arrivals" && <ArrivalsAndSchemes />}
@@ -99,7 +99,7 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
     {visibleView === "credit" && linked && <RaiseCreditNote />}
     {visibleView === "purchases" && linked && <RecentPurchases invoices={invoices} fillViewport />}
     {visibleView === "outstanding" && linked && <>
-      <h2 className="text-xl font-bold">Outstanding invoices</h2>
+      <h2 className="text-xl font-bold">Outstandings</h2>
       {outstanding.length ? (
         <div ref={outstandingListRef} className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full min-w-[540px] border-collapse text-left text-xs sm:text-sm">
@@ -119,8 +119,8 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
                   <td className="whitespace-nowrap px-3 py-3 text-slate-700">{outstandingDate(invoice.invoiceDate)}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{invoice.invoiceNo}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
-                    <span className="block font-semibold text-slate-900">₹{outstandingMoney(partPaid ? invoice.balanceAmount : invoice.invoiceAmount)}</span>
-                    <span className="text-xs text-slate-500">{partPaid ? "Balance" : "Invoice amount"}</span>
+                    <span className="block font-semibold text-slate-900">{outstandingMoney(partPaid ? invoice.balanceAmount : invoice.invoiceAmount)}</span>
+                    {partPaid && <span className="text-xs text-slate-500">Balance</span>}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
                     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${partPaid ? "bg-amber-100 text-amber-900" : "bg-blue-50 text-blue-800"}`}>

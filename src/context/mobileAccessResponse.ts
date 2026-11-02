@@ -11,6 +11,7 @@ export function isMobileAccessData(value: unknown): value is AccessData {
   const { account, user, customers } = value;
   return positiveID(account.userId) && ["PENDING", "INTERNAL", "EXTERNAL"].includes(String(account.kind))
     && typeof account.active === "boolean"
+    && (value.taskPermissions == null || (Array.isArray(value.taskPermissions) && value.taskPermissions.every((permission: unknown) => typeof permission === "string")))
     && ["username", "name", "email", "whatsapp"].every((key) => typeof user[key] === "string")
     && typeof user.emailVerified === "boolean" && typeof user.whatsappVerified === "boolean"
     && customers.every((customer) => record(customer) && positiveID(customer.customerId)
