@@ -13,6 +13,25 @@ type BatchStock = {
   ClosingQty2At: number;
 };
 
+function batchExpiryColor(expDate: string | null, today: Date) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T ])/.exec(expDate ?? "");
+  if (!match) return "";
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return "";
+
+  const expiry = year * 10000 + month * 100 + day;
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const nearExpiryEnd = new Date(today.getFullYear(), today.getMonth() + 4, 0);
+  const dateKey = (date: Date) => date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+
+  if (expiry < dateKey(monthEnd)) return "bg-red-200";
+  if (expiry <= dateKey(nearExpiryEnd)) return "bg-yellow-200";
+  return "";
+}
+
 export default function ItemStockDetails({ itemId, initialStock }: { itemId: number; initialStock?: CurrentStock | null }) {
   const [stock, setStock] = useState<CurrentStock | null>(initialStock ?? null);
   const [stockError, setStockError] = useState(false);
@@ -21,6 +40,17 @@ export default function ItemStockDetails({ itemId, initialStock }: { itemId: num
   const [batchError, setBatchError] = useState(false);
   const [retry, setRetry] = useState(0);
   const [batchRetry, setBatchRetry] = useState(0);
+  const [today, setToday] = useState(() => new Date());
+
+  useEffect(() => {
+    const refreshDate = () => setToday(new Date());
+    document.addEventListener("visibilitychange", refreshDate);
+    window.addEventListener("focus", refreshDate);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshDate);
+      window.removeEventListener("focus", refreshDate);
+    };
+  }, []);
 
   useEffect(() => {
     // Company rows already have current stock. Keep that snapshot until the
@@ -90,13 +120,13 @@ export default function ItemStockDetails({ itemId, initialStock }: { itemId: num
           <table className="w-full border-collapse whitespace-nowrap text-left text-sm">
             <caption className="sr-only">Batch wise current stock</caption>
             <thead className="bg-blue-100 text-blue-900"><tr>
-              {["Batch No.", "Expiry", "MRP", "PurDate", "Stock"].map((heading, index) => <th key={heading} scope="col" className={`px-3 py-2 ${index === 2 || index === 4 ? "text-right" : ""}`}>{heading}</th>)}
+              {["Batch No.", "Expiry", "MRP", "Pur Date", "Stock"].map((heading, index) => <th key={heading} scope="col" className={`px-3 py-2 ${index === 2 || index === 4 ? "text-right" : ""}`}>{heading}</th>)}
             </tr></thead>
-            <tbody>{batches.length ? batches.map((batch, index) => <tr key={`${batch.BatSrNo}-${index}`} className="border-t border-blue-100 even:bg-sky-50/70">
+            <tbody>{batches.length ? batches.map((batch, index) => <tr key={`${batch.BatSrNo}-${index}`} className={`border-t border-blue-100 ${batchExpiryColor(batch.ExpDate, today) || "even:bg-sky-50/70"}`}>
               <td className="px-3 py-2">{batch.BatchNo || "—"}</td>
               <td className="px-3 py-2">{stockDate(batch.ExpDate, true)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{Number(batch.MRP || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-              <td className="px-3 py-2">{stockDate(batch.PurDate)}</td>
+              <td className="px-3 py-2">{stockDate(batch.PurDate, true)}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatStock(batch.ClosingQty1At, batch.ClosingQty2At)}</td>
             </tr>) : <tr><td colSpan={5} className="px-3 py-3 text-gray-600">No nonzero batch stock available.</td></tr>}</tbody>
           </table>
