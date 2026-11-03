@@ -12,6 +12,8 @@ import {
 } from "../components/mobileModules";
 import { usePermissions } from "../context/PermissionContext";
 import API from "../services/api";
+import { useTaskState } from "../hooks/useTaskState";
+import { navigationKey, readNavigation, saveNavigation } from "../services/navigationState";
 import ItemLocationPage from "./ItemLocationPage";
 import PurchasesPage from "./PurchasesPage";
 import CompaniesPage from "./CompaniesPage";
@@ -120,13 +122,16 @@ function MenuIcon() {
 
 export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabsPageProps) {
   const access = useMobileAccess();
-  const [teamOpen, setTeamOpen] = useState(false);
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(() => readNavigation(navigationKey(0, null)).shellView === "team");
+  const [credentialsOpen, setCredentialsOpen] = useState(() => readNavigation(navigationKey(0, null)).shellView === "credentials");
   const { canAccess, loading: permissionsLoading } = usePermissions();
-  const [activeModule, setActiveModule] = useState<MobileModule | null>(null);
+  const [activeModule, setActiveModule] = useState<MobileModule | null>(() => {
+    const saved = readNavigation(navigationKey(0, null)).module;
+    return MOBILE_MODULES.some((module) => module.key === saved) ? saved as MobileModule : null;
+  });
   const [salesOrderRoleAccess, setSalesOrderRoleAccess] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(() => readNavigation(navigationKey(0, null)).shellView === "profile");
   const profileStatus = access.customer ? "LINKED" : "PENDING";
   const [customerPortalKey, setCustomerPortalKey] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -136,7 +141,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   const linkedCustomer = Boolean(access.customer);
   const selectedCustomerId = access.customer?.customerId;
 
-  const [rackTarget, setRackTarget] = useState<RackTarget | null>(null);
+  const [rackTarget, setRackTarget] = useTaskState<RackTarget | null>("modules", "rack-target", null, (value): value is RackTarget | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as RackTarget).id)));
   const [companyFocusTarget, setCompanyFocusTarget] =
     useState<CompanyFocusTarget | null>(null);
   const [purchaseFocusTarget, setPurchaseFocusTarget] =
@@ -224,6 +229,15 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     (hasModuleAccess(activeModule) || (activeModule === "rack" && rackTarget))
       ? activeModule
       : null;
+  useEffect(() => {
+    if (access.loading || permissionsLoading) return;
+    saveNavigation(navigationKey(0, null), { module: selectedModule });
+  }, [access.loading, permissionsLoading, selectedModule]);
+  useEffect(() => {
+    saveNavigation(navigationKey(0, null), {
+      shellView: credentialsOpen ? "credentials" : teamOpen ? "team" : profileOpen ? "profile" : null,
+    });
+  }, [credentialsOpen, teamOpen, profileOpen]);
   const customerExperience = Boolean(access.data);
   const needsCustomerSelection = Boolean(access.data?.account.kind === "EXTERNAL" && access.data.customers.length > 0 && !access.customer);
   const showCustomerHeader = customerExperience && !profileOpen && customerIdentity;
@@ -242,7 +256,10 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   };
 
   const goHome = () => {
+    saveNavigation(navigationKey(access.data?.account.userId ?? 0, access.customer?.customerId ?? null), { view: "home", companyId: null });
+    saveNavigation(navigationKey(0, null), { module: null, shellView: null });
     setActiveModule(null);
+    setRackTarget(null);
     setProfileOpen(false);
     setTeamOpen(false);
     setCredentialsOpen(false);
@@ -409,7 +426,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
         </div>
       </header>
 
-      {access.loading ? <p className="p-5 text-center text-slate-600">Loading your account...</p> : access.error ? <div role="alert" className="mx-auto max-w-lg space-y-3 p-5"><p>{access.error}</p><div className="flex flex-wrap gap-4"><button type="button" className="text-blue-700 underline" onClick={() => void access.reload()}>Retry</button><button type="button" className="text-blue-700 underline" onClick={onLogout}>Sign in again</button></div></div> : credentialsOpen ? <MobileVerification mode="credentials" onBack={goHome} onComplete={onLogout} /> : needsCustomerSelection ? <section className="mx-auto max-w-3xl space-y-3 p-5"><h1 className="text-xl font-bold">Select a customer</h1><p className="text-sm text-slate-600">Choose an assigned customer to continue.</p>{access.data?.customers.map(customer => <button className="block w-full rounded-xl border border-blue-200 bg-white p-4 text-left hover:bg-blue-50" key={customer.customerId} onClick={() => { access.selectCustomer(customer.customerId);goHome(); }}><span className="block font-bold">{customer.customerName}</span><span className="text-sm text-slate-600">{customer.gstNo}</span></button>)}</section> : teamOpen ? <MobileTeam onBack={goHome} /> : profileOpen && access.can("profile") ? (
+      {access.loading ? <p className="p-5 text-center text-slate-600">Loading your account...</p> : access.error ? <div role="alert" className="mx-auto max-w-lg space-y-3 p-5"><p>{access.error}</p><div className="flex flex-wrap gap-4"><button type="button" className="text-blue-700 underline" onClick={() => void access.reload()}>Retry</button><button type="button" className="text-blue-700 underline" onClick={onLogout}>Sign in again</button></div></div> : credentialsOpen ? <MobileVerification mode="credentials" onBack={goHome} onComplete={onLogout} /> : needsCustomerSelection ? <section className="mx-auto max-w-3xl space-y-3 p-5"><h1 className="text-xl font-bold">Select a customer</h1><p className="text-sm text-slate-600">Choose an assigned customer to continue.</p>{access.data?.customers.map(customer => <button className="block w-full rounded-xl border border-blue-200 bg-white p-4 text-left hover:bg-blue-50" key={customer.customerId} onClick={() => { access.selectCustomer(customer.customerId);goHome(); }}><span className="block font-bold">{customer.customerName}</span><span className="text-sm text-slate-600">{customer.gstNo}</span></button>)}</section> : teamOpen && access.data?.account.kind === "EXTERNAL" && access.can("admin") ? <MobileTeam onBack={goHome} /> : profileOpen && access.can("profile") ? (
         <Profile onOpenCredentials={() => { setProfileOpen(false);setCredentialsOpen(true); }} onBack={() => setProfileOpen(false)} onCredentialsChanged={onLogout} onProfileSaved={(profile) => { setActiveModule(null);  setCustomerIdentityState({ customerId:access.customer?.customerId ?? 0,identity:customerIdentityFromProfile(profile) }); }} />
       ) : customerExperience ? (
         <CustomerPortalPage key={`${customerPortalKey}:${access.customer?.customerId ?? "viewer"}`} linked={linkedCustomer} />
@@ -465,6 +482,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
               aria-hidden={selectedModule !== "companies"}
             >
               <CompaniesPage
+                navigationStateKey={navigationKey(access.data?.account.userId ?? 0, access.customer?.customerId ?? null)}
                 onEditRack={openItemInRack}
                 canUpdateCompany={canUpdateCompany}
                 canUpdateRack={canUpdateRack}

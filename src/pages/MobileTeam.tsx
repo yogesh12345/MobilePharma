@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import API from "../services/api";
+import { useTaskState } from "../hooks/useTaskState";
 type Member = { userId: number; username: string; name: string; email: string; whatsapp: string; permissions: string[]; owner: boolean; invited: boolean };
 const labels: Record<string,string> = { catalog: "Companies and items", arrivals: "New arrivals and schemes", orders: "Place or update orders", invoices: "Invoices", outstanding: "Outstanding", credit_notes: "Create or update credit notes", admin: "Customer administrator (all customer tasks)" };
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-3";
 const errorMessage = (error: unknown) => (error as { response?: { data?: { error?: string } } }).response?.data?.error ?? "Unable to update organization users.";
 export default function MobileTeam({ onBack }: { onBack: () => void }) {
  const [users,setUsers] = useState<Member[]>([]);
- const [editing,setEditing] = useState<Member | null>(null);
- const [channel,setChannel] = useState("email");
- const [contact,setContact] = useState("");
- const [name,setName] = useState("");
- const [permissions,setPermissions] = useState<string[]>(["catalog"]);
+ const [editing,setEditing] = useTaskState<Member | null>("mobile-team", "editing", null, (value): value is Member | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as Member).userId)));
+ const [channel,setChannel] = useTaskState("mobile-team", "channel", "email", (value): value is string => value === "email" || value === "whatsapp");
+ const [contact,setContact] = useTaskState("mobile-team", "contact", "", (value): value is string => typeof value === "string");
+ const [name,setName] = useTaskState("mobile-team", "name", "", (value): value is string => typeof value === "string");
+ const [permissions,setPermissions] = useTaskState<string[]>("mobile-team", "permissions", ["catalog"], (value): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === "string"));
  const [error,setError] = useState("");
  const [notice,setNotice] = useState("");
  const [busy,setBusy] = useState(false);
@@ -25,7 +26,7 @@ export default function MobileTeam({ onBack }: { onBack: () => void }) {
   try { await API.delete(`/mobile/team/${user.userId}`);setNotice("User removed.");if (editing?.userId === user.userId) setEditing(null);await load(); } catch (error) { setError(errorMessage(error)); } finally { setBusy(false); }
  };
  const additional = users.filter(user => !user.owner).length;
- return <section className="mx-auto max-w-3xl space-y-4 px-4 py-5">
+ return <section className="mx-auto max-w-3xl space-y-4 px-1 py-1 sm:px-4 sm:py-5">
   <div className="flex items-center justify-between"><h1 className="text-xl font-bold">Organization users</h1><button className="text-blue-700 underline" onClick={onBack}>Back</button></div><p className="text-sm text-slate-600">{additional} of 4 additional users. New users register with their assigned email or WhatsApp number and verify their OTP.</p>
   {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error}</p>}{notice && <p role="status" className="rounded bg-green-50 p-3 text-green-800">{notice}</p>}
   <div className="space-y-2">{users.map(user => <article key={user.userId} className="rounded-xl border bg-white p-4"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{user.name || user.username}{user.owner && " ? First owner"}</h2><p className="text-sm text-slate-600">{user.email || user.whatsapp}{user.invited && " ? Awaiting OTP registration"}</p><p className="mt-1 text-xs text-slate-500">{user.owner ? "All customer tasks" : user.permissions.map(permission => labels[permission]).join(", ") || "No tasks assigned"}</p></div>{!user.owner && <div className="flex gap-3"><button disabled={busy} className="text-blue-700 underline" onClick={() => { setEditing(user);setPermissions(user.permissions);setError(""); }}>Edit roles</button><button disabled={busy} className="text-red-700 underline" onClick={() => void remove(user)}>Remove</button></div>}</div></article>)}</div>

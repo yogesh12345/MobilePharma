@@ -1,6 +1,7 @@
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import API from "../services/api";
 import { openInvoicePdf } from "../services/invoicePdf";
+import { useTaskState } from "../hooks/useTaskState";
 
 export type PurchaseInvoice = {
   id: number;
@@ -52,7 +53,7 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
   title?: string;
   fillViewport?: boolean;
 }) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useTaskState<string | null>(onItemSelect ? "claim-invoices" : "recent-purchases", "invoice", null, (value): value is string | null => value === null || typeof value === "string");
   const [itemsByInvoice, setItemsByInvoice] = useState<Record<string, InvoiceItem[]>>({});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [detailError, setDetailError] = useState("");
@@ -63,6 +64,20 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
   const lastTouchOpen = useRef(0);
   const pendingKeys = useRef(new Set<string>());
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selectedKey || !invoices.length || itemsByInvoice[selectedKey] || pendingKeys.current.has(selectedKey)) return;
+    const invoice = invoices.find((row) => invoiceKey(row) === selectedKey);
+    if (!invoice) return;
+    pendingKeys.current.add(selectedKey);
+    const key = selectedKey;
+    queueMicrotask(() => setLoadingKey(key));
+    void API.get(`/mobile/customer-portal/invoices/${invoice.id}/items`, {
+      params: { invoiceYear: invoice.invoiceYear },
+    }).then(({ data }) => setItemsByInvoice((current) => ({ ...current, [key]: data.items ?? [] })))
+      .catch(() => setDetailError("Unable to load invoice items."))
+      .finally(() => { pendingKeys.current.delete(key); setLoadingKey((current) => current === key ? null : current); });
+  }, [selectedKey, invoices, itemsByInvoice]);
 
   useLayoutEffect(() => {
     if (!fillViewport) return;

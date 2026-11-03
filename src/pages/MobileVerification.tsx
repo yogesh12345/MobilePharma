@@ -41,7 +41,7 @@ export default function MobileVerification({ mode, onBack, onComplete }: { mode:
    setNotice(response.data.message); setChallengeId(""); setCode(""); setPassword(""); setConfirm(""); onComplete?.();
   } catch (error) { setError(errorMessage(error)); } finally { setBusy(false); }
  };
- return <section className="mx-auto max-w-lg space-y-4 p-5">
+ return <section className="mx-auto max-w-lg space-y-4 p-1 sm:p-5">
   <h1 className="text-xl font-bold">{mode === "register" ? "Register or activate an invitation" : mode === "recover" ? "Recover login credentials" : "Change login credentials"}</h1>
   <p className="text-sm text-slate-600">{mode === "register" ? "Verify your email or WhatsApp number. New accounts can browse companies while awaiting review." : "Verify a contact already registered to your account."}</p>
   {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error}</p>}{notice && <p role="status" className="rounded bg-green-50 p-3 text-green-800">{notice}</p>}

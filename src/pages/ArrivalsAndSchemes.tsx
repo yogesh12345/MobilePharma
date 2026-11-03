@@ -4,6 +4,7 @@ import API from "../services/api";
 import FloatingLabelSelect from "../components/FloatingLabelSelect";
 import FloatingLabelDateInput from "../components/FloatingLabelDateInput";
 import { useMobileAccess } from "../context/mobileAccess";
+import { navigationKey, readTaskState, saveTaskState, taskStateKey } from "../services/navigationState";
 
 type Tab = "arrivals" | "schemes";
 type Item = {
@@ -21,14 +22,26 @@ const dateLabel = (value: string) => {
 const cell = "px-2 py-2";
 
 export default function ArrivalsAndSchemes() {
-  const [tab, setTab] = useState<Tab>("arrivals");
-  const [days, setDays] = useState("30");
-  const [threshold, setThreshold] = useState("all");
-  const [asOf, setAsOf] = useState(today);
+  const access = useMobileAccess();
+  const stateKey = taskStateKey(navigationKey(access.data?.account.userId ?? 0, access.customer?.customerId ?? null), "arrivals-and-schemes");
+  const [tab, setTab] = useState<Tab>(() => readTaskState<{ tab?: string }>(stateKey, {}).tab === "schemes" ? "schemes" : "arrivals");
+  const [days, setDays] = useState(() => {
+    const saved = readTaskState<{ days?: string }>(stateKey, {}).days;
+    return ["7", "15", "30"].includes(saved ?? "") ? saved! : "30";
+  });
+  const [threshold, setThreshold] = useState(() => {
+    const saved = readTaskState<{ threshold?: string }>(stateKey, {}).threshold;
+    return ["all", "above50", "above25", "above10", "below10"].includes(saved ?? "") ? saved! : "all";
+  });
+  const [asOf, setAsOf] = useState(() => {
+    const saved = readTaskState<{ asOf?: string }>(stateKey, {}).asOf;
+    return saved && /^\d{4}-\d{2}-\d{2}$/.test(saved) ? saved : today();
+  });
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<{ key: string; items: Item[]; error: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const customerID = useMobileAccess().customer?.customerId;
+  const restoreScrollRef = useRef<{ scrollTop?: number; scrollLeft?: number } | null>(readTaskState(stateKey, {}));
+  const customerID = access.customer?.customerId;
   const requestKey = JSON.stringify([tab, days, threshold, asOf, retry, customerID]);
   const current = result?.key === requestKey ? result : null;
   const validDate = tab !== "schemes" || /^\d{4}-\d{2}-\d{2}$/.test(asOf);
@@ -43,6 +56,18 @@ export default function ArrivalsAndSchemes() {
     return [...grouped.entries()];
   }, [current]);
   const visibleCount = groups.reduce((total, [, group]) => total + group.items.length, 0);
+
+  useEffect(() => {
+    const previous = readTaskState<{ scrollTop?: number; scrollLeft?: number }>(stateKey, {});
+    saveTaskState(stateKey, { tab, days, threshold, asOf, scrollTop: previous.scrollTop ?? 0, scrollLeft: previous.scrollLeft ?? 0 });
+  }, [stateKey, tab, days, threshold, asOf]);
+
+  useLayoutEffect(() => {
+    if (loading || !listRef.current || !restoreScrollRef.current) return;
+    listRef.current.scrollTop = restoreScrollRef.current.scrollTop ?? 0;
+    listRef.current.scrollLeft = restoreScrollRef.current.scrollLeft ?? 0;
+    restoreScrollRef.current = null;
+  }, [loading]);
 
   useEffect(() => {
     if (!validDate) return;
@@ -91,11 +116,12 @@ export default function ArrivalsAndSchemes() {
       {(["arrivals", "schemes"] as const).map((value, index) => <button
         key={value} type="button" role="tab" id={`offers-tab-${value}`} aria-selected={tab === value}
         aria-controls={`offers-panel-${value}`} tabIndex={tab === value ? 0 : -1}
-        onClick={() => setTab(value)} onKeyDown={(event) => {
+        onClick={() => { setTab(value); if (listRef.current) listRef.current.scrollTop = 0; }} onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
           event.preventDefault();
           const next = event.key === "Home" ? "arrivals" : event.key === "End" ? "schemes" : index === 0 ? "schemes" : "arrivals";
           setTab(next);
+          if (listRef.current) listRef.current.scrollTop = 0;
           document.getElementById(`offers-tab-${next}`)?.focus();
         }}
         className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${tab === value ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-300 bg-white text-slate-700 hover:bg-blue-50"}`}>
@@ -125,7 +151,10 @@ export default function ArrivalsAndSchemes() {
         </>}
         <span role="status" className="text-xs text-slate-500">{loading ? "Loading..." : current && !current.error ? `${visibleCount} ${tab === "arrivals" ? "items" : "schemes"} / ${groups.length} companies` : ""}</span>
       </div>
-      <div ref={listRef} aria-busy={loading} className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div ref={listRef} onScroll={(event) => {
+        const previous = readTaskState<Record<string, unknown>>(stateKey, {});
+        saveTaskState(stateKey, { ...previous, scrollTop: event.currentTarget.scrollTop, scrollLeft: event.currentTarget.scrollLeft });
+      }} aria-busy={loading} className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         {!validDate ? <p role="alert" className="p-4 text-sm text-red-700">Choose a valid date.</p>
           : loading ? <p className="p-4 text-sm text-slate-500">Loading results...</p>
           : current?.error ? <div role="alert" className="p-4 text-sm text-red-700">{current.error} <button type="button" className="underline" onClick={() => setRetry((value) => value + 1)}>Retry</button></div>

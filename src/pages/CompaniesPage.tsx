@@ -5,6 +5,8 @@ import GenericAutoComplete from "../components/GenericAutoComplete";
 import type { AutoCompleteItem } from "../types/item";
 import type { CurrentStock as StockValue } from "../utils/stockDisplay";
 import { searchCompanyItems } from "./companyItemSearch";
+import { navigationKey, readNavigation, readTaskState, saveNavigation, saveTaskState, taskStateKey } from "../services/navigationState";
+import { useTaskState } from "../hooks/useTaskState";
 
 type CompanyRow = {
   id: number;
@@ -36,6 +38,7 @@ type CurrentStock = {
 };
 
 interface CompaniesPageProps {
+  navigationStateKey?: string;
   showItemSearch?: boolean;
   compactTop?: boolean;
   onEditRack?: (item: { id: number; ItemName: string; stock?: StockValue | null }) => void;
@@ -90,6 +93,7 @@ const apiErrorMessage = (error: unknown, fallback: string) =>
 const STOCK_BATCH_SIZE = 10;
 
 const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(function CompaniesPage({
+  navigationStateKey,
   showItemSearch = true,
   compactTop = false,
   onEditRack,
@@ -102,6 +106,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [selected, setSelected] = useState<CompanyDetail | null>(null);
   const companyListRef = useRef<HTMLElement>(null);
+  const itemListRef = useRef<HTMLElement>(null);
   const companyDetailRef = useRef<HTMLDivElement>(null);
   const companyFooterRef = useRef<HTMLElement>(null);
   const [items, setItems] = useState<CompanyItem[]>([]);
@@ -117,8 +122,9 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
   const [message, setMessage] = useState("");
   const [compName, setCompName] = useState("");
   const [compShort, setCompShort] = useState("");
-  const [itemSearch, setItemSearch] = useState("");
-  const [globalItemSearch, setGlobalItemSearch] = useState("");
+  const [itemSearch, setItemSearch] = useTaskState("companies", "item-search", "", (value): value is string => typeof value === "string");
+  const [globalItemSearch, setGlobalItemSearch] = useTaskState("companies", "global-search", "", (value): value is string => typeof value === "string");
+  const scrollStateKey = taskStateKey(navigationStateKey ?? navigationKey(0, null), "companies-scroll");
   const [searchMode, setSearchMode] = useState<"live" | "onCondition">(
     () => localStorage.getItem("autoCompleteMode") === "onCondition" ? "onCondition" : "live",
   );
@@ -239,7 +245,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
    * Requests are sent in small batches so a company with hundreds of
    * items does not create one large simultaneous burst of HTTP requests.
    */
-  const loadCurrentStockForItems = async (
+  const loadCurrentStockForItems = useCallback(async (
     companyItems: CompanyItem[],
     requestKey: number,
   ) => {
@@ -335,15 +341,18 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
         setLoadingStock(false);
       }
     }
-  };
+  }, []);
 
-  const openCompany = async (company: CompanyRow) => {
+  const openCompany = useCallback(async (company: CompanyRow, restoring = false) => {
     const requestKey = ++stockRequestKeyRef.current;
 
     setLoadingItems(true);
     setLoadingStock(false);
     setMessage("");
-    setItemSearch("");
+    if (!restoring) {
+      setItemSearch("");
+      saveTaskState(scrollStateKey, { ...readTaskState<Record<string, number>>(scrollStateKey, {}), item: 0 });
+    }
     setCurrentStock({});
     setStockUnavailableCount(0);
 
@@ -360,6 +369,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
         : [];
 
       setSelected(c);
+      if (navigationStateKey) saveNavigation(navigationStateKey, { companyId: c.id });
       setCompName(c?.CompName ?? "");
       setCompShort(c?.CompShort ?? "");
       setItems(companyItems);
@@ -371,11 +381,28 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
        */
       void loadCurrentStockForItems(companyItems, requestKey);
     } catch (error: unknown) {
+      if (navigationStateKey) saveNavigation(navigationStateKey, { companyId: null });
       setMessage(apiErrorMessage(error, "Unable to load company items."));
     } finally {
       setLoadingItems(false);
     }
-  };
+  }, [navigationStateKey, loadCurrentStockForItems, scrollStateKey, setItemSearch]);
+
+  const restoredNavigationKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!navigationStateKey || restoredNavigationKey.current === navigationStateKey) return;
+    restoredNavigationKey.current = navigationStateKey;
+    const companyId = readNavigation(navigationStateKey).companyId;
+    if (companyId) void openCompany({ id: companyId, CompName: "", CompShort: "", ItemCount: 0 }, true);
+  }, [navigationStateKey, openCompany]);
+
+  useLayoutEffect(() => {
+    if (!loading && companyListRef.current) companyListRef.current.scrollTop = readTaskState<{ company?: number }>(scrollStateKey, {}).company ?? 0;
+  }, [loading, scrollStateKey]);
+
+  useLayoutEffect(() => {
+    if (selected && !loadingItems && itemListRef.current) itemListRef.current.scrollTop = readTaskState<{ item?: number }>(scrollStateKey, {}).item ?? 0;
+  }, [selected, loadingItems, scrollStateKey]);
 
   const selectGlobalItem = (item: AutoCompleteItem) => {
     setGlobalItemSearch(item.label1);
@@ -384,6 +411,8 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
   };
 
   const closeCompany = useCallback(() => {
+    if (navigationStateKey) saveNavigation(navigationStateKey, { companyId: null });
+    saveTaskState(scrollStateKey, { ...readTaskState<Record<string, number>>(scrollStateKey, {}), item: 0 });
     stockRequestKeyRef.current += 1;
     setSelected(null);
     setItems([]);
@@ -393,7 +422,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
     setGlobalItemSearch("");
     setLoadingStock(false);
     setMessage("");
-  }, []);
+  }, [navigationStateKey, scrollStateKey, setItemSearch, setGlobalItemSearch]);
 
   useImperativeHandle(ref, () => ({
     backToCompaniesList: () => {
@@ -486,7 +515,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
 
   if (selected) {
     return (
-      <div ref={companyDetailRef} className={`mx-auto flex min-h-0 w-full max-w-3xl flex-col gap-3 px-3 sm:px-4 ${compactTop ? "pt-1" : "pt-4"}`}>
+      <div ref={companyDetailRef} className={`mx-auto flex min-h-0 w-full max-w-3xl flex-col gap-3 px-1 pt-1 sm:px-4 ${compactTop ? "" : "sm:pt-4"}`}>
         <section className="shrink-0 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
           <div className="p-3 sm:p-4">
             {canUpdateCompany ? <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
@@ -568,6 +597,8 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
         </section>
 
         <section
+          ref={itemListRef}
+          onScroll={(event) => saveTaskState(scrollStateKey, { ...readTaskState<Record<string, number>>(scrollStateKey, {}), item: event.currentTarget.scrollTop })}
           aria-label="Company items"
           tabIndex={0}
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl border border-blue-200 bg-white shadow-sm focus-visible:outline-2 focus-visible:outline-blue-500"
@@ -690,7 +721,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
   }
 
   return (
-    <div className={`mx-auto w-full max-w-3xl px-3 pb-4 sm:px-4 ${compactTop ? "pt-1" : "pt-4"}`}>
+    <div className={`mx-auto w-full max-w-3xl px-1 pt-1 pb-4 sm:px-4 ${compactTop ? "" : "sm:pt-4"}`}>
       {showItemSearch && <fieldset className="mb-3 min-w-0 rounded-lg border-2 border-blue-400 bg-white px-2 pb-1 focus-within:ring-2 focus-within:ring-blue-100">
         <legend className="ml-1 px-1 text-sm font-medium text-blue-600">
           Search Item
@@ -714,7 +745,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
         </div>
       )}
 
-      <section ref={companyListRef} className="overflow-y-auto rounded-xl border border-blue-200 bg-white shadow-sm">
+      <section ref={companyListRef} onScroll={(event) => saveTaskState(scrollStateKey, { ...readTaskState<Record<string, number>>(scrollStateKey, {}), company: event.currentTarget.scrollTop })} className="overflow-y-auto rounded-xl border border-blue-200 bg-white shadow-sm">
         <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_4rem_4.25rem] gap-2 border-b bg-blue-50 px-3 py-2 text-xs font-bold uppercase text-blue-900">
           <span>Company Name</span>
           <span className="text-right">Short</span>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import API from "../services/api";
 import { formatStock, stockDate, type CurrentStock } from "../utils/stockDisplay";
+import { useTaskState } from "../hooks/useTaskState";
 
 type BatchStock = {
   BatSrNo: number;
@@ -15,7 +16,7 @@ type BatchStock = {
 export default function ItemStockDetails({ itemId, initialStock }: { itemId: number; initialStock?: CurrentStock | null }) {
   const [stock, setStock] = useState<CurrentStock | null>(initialStock ?? null);
   const [stockError, setStockError] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useTaskState("item-stock", `expanded:${itemId}`, false, (value): value is boolean => typeof value === "boolean");
   const [batches, setBatches] = useState<BatchStock[] | null>(null);
   const [batchError, setBatchError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -72,7 +73,7 @@ export default function ItemStockDetails({ itemId, initialStock }: { itemId: num
 
   const nonzero = stock !== null && (stock.ClosingQty1 !== 0 || stock.ClosingQty2 !== 0);
 
-  return <section aria-label="Item stock" className="rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+  return <section aria-label="Item stock" className="rounded-lg border border-blue-200 bg-blue-50/50 p-2 sm:p-3">
     <div className="flex flex-wrap items-center gap-2">
       <span className="font-semibold text-gray-700">Total Stock:</span>
       {stock || initialStock === null ? <button type="button" disabled={stock !== null && !nonzero && !expanded} aria-expanded={expanded} aria-controls={`batch-stock-${itemId}`}

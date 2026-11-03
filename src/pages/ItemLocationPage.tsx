@@ -5,6 +5,7 @@ import GenericAutoComplete from "../components/GenericAutoComplete";
 import ItemStockDetails from "../components/ItemStockDetails";
 import type { CurrentStock } from "../utils/stockDisplay";
 import type { AutoCompleteItem, ItemDetails } from "../types/item";
+import { useTaskState } from "../hooks/useTaskState";
 
 interface ItemLocationPageProps {
   onLogout?: () => void;
@@ -38,10 +39,10 @@ export default function ItemLocationPage({
   rackTarget = null,
   onRackOperationComplete,
 }: ItemLocationPageProps) {
-  const [itemQuery, setItemQuery] = useState("");
-  const [selectedItem, setSelectedItem] = useState<ItemDetails | null>(null);
+  const [itemQuery, setItemQuery] = useTaskState("rack", "query", "", (value): value is string => typeof value === "string");
+  const [selectedItem, setSelectedItem] = useTaskState<ItemDetails | null>("rack", "item", null, (value): value is ItemDetails | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as ItemDetails).id)));
   const [selectedStock, setSelectedStock] = useState<CurrentStock | null | undefined>(undefined);
-  const [rackNumber, setRackNumber] = useState("");
+  const [rackNumber, setRackNumber] = useTaskState("rack", "rack-number", "", (value): value is string => typeof value === "string");
   const [loadingItem, setLoadingItem] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
@@ -193,6 +194,7 @@ export default function ItemLocationPage({
   // when MobileTabsPage switches to the Update Rack tab.
   useEffect(() => {
     if (!rackTarget) return;
+    if (selectedItem?.id === rackTarget.id && itemQuery === rackTarget.itemName) return;
     void loadItemDetails(rackTarget.id, rackTarget.itemName, rackTarget.stock);
     // requestKey intentionally allows reopening the same item later.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,8 +255,8 @@ export default function ItemLocationPage({
         </header>
       )}
 
-      <div className="mx-auto w-full max-w-3xl px-3 py-4 pb-24 sm:px-4 sm:py-5">
-        <section className="rounded-xl border border-blue-200 bg-white p-4 shadow-md sm:p-5">
+      <div className="mx-auto w-full max-w-3xl px-1 py-1 pb-16 sm:px-4 sm:py-5">
+        <section className="rounded-xl border border-blue-200 bg-white p-2 shadow-md sm:p-5">
           <div className="mb-6">
             <fieldset className="min-w-0 rounded-lg border-2 border-blue-400 bg-white px-2 pb-1 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100">
               <legend className="ml-1 px-1 text-sm font-medium text-blue-600">

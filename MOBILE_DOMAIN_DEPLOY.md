@@ -95,6 +95,17 @@ npm ci
 npm run build:mobile-domain
 ```
 
+After publishing the new build, reopen the installed shortcut once so Chrome
+loads the updated app files. To verify navigation restoration, open each task,
+press the Android system Back button to leave the shortcut, then relaunch it.
+On Chrome versions that support the manifest launch handler, the shortcut also
+focuses an existing app window without reloading it when that window remains open.
+The app restores the last open task and its saved drill-down state, including
+the Schemes tab and filters, expanded records, selected items, and in-progress
+order and claim entries. In-app Back and Home update the saved navigation;
+sign-out clears it. Passwords and one-time verification codes are not
+saved; their verification step may need to be restarted after a full reload.
+
 Copy the **contents** of `dist/` to `/var/www/mobilepharma/` on the HTTPS host.
 The generated `index.html` must refer to `/assets/...`, `/manifest.webmanifest`,
 and `/sw.js`, with no `/mobile-app/` prefix.

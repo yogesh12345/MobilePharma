@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTaskState } from "../hooks/useTaskState";
 import API from "../services/api";
 
 type PurchaseInvoice = {
@@ -169,7 +170,8 @@ export default function PurchasesPage({
   focusRequestKey = 0,
 }: PurchasesPageProps) {
   const [months, setMonths] = useState<PurchaseMonth[]>([]);
-  const [openMonth, setOpenMonth] = useState<string>("");
+  const [openMonth, setOpenMonth] = useTaskState("purchases", "month", "", (value): value is string => typeof value === "string");
+  const [selectedInvoiceId, setSelectedInvoiceId] = useTaskState<number | null>("purchases", "invoice", null, (value): value is number | null => value === null || Number.isSafeInteger(value));
   const [selectedInvoice, setSelectedInvoice] = useState<PurchaseInvoice | null>(null);
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -212,7 +214,7 @@ export default function PurchasesPage({
         if (disposed) return;
 
         setMonths(nextMonths);
-        if (nextMonths.length > 0) setOpenMonth(nextMonths[0].MonthKey);
+        if (nextMonths.length > 0) setOpenMonth((current) => nextMonths.some((month) => month.MonthKey === current) ? current : nextMonths[0].MonthKey);
       } catch (error: any) {
         if (!disposed) {
           setMessage(error?.response?.data?.error || "Unable to load purchases.");
@@ -227,15 +229,16 @@ export default function PurchasesPage({
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [setOpenMonth]);
 
-  const openInvoice = async (
+  const openInvoice = useCallback(async (
     invoice: PurchaseInvoice,
     options: { forceOpen?: boolean } = {},
   ) => {
     if (selectedInvoice?.id === invoice.id && !options.forceOpen) {
       itemRequestKeyRef.current += 1;
       setSelectedInvoice(null);
+      setSelectedInvoiceId(null);
       setItems([]);
       setMessage("");
       setLoadingItems(false);
@@ -244,6 +247,7 @@ export default function PurchasesPage({
 
     const requestKey = ++itemRequestKeyRef.current;
     setSelectedInvoice(invoice);
+    setSelectedInvoiceId(invoice.id);
     setItems([]);
     setMessage("");
     setLoadingItems(true);
@@ -258,7 +262,13 @@ export default function PurchasesPage({
     } finally {
       if (itemRequestKeyRef.current === requestKey) setLoadingItems(false);
     }
-  };
+  }, [selectedInvoice?.id, setSelectedInvoiceId]);
+
+  useEffect(() => {
+    if (loading || !selectedInvoiceId || selectedInvoice?.id === selectedInvoiceId) return;
+    const invoice = months.flatMap((month) => month.invoices).find((row) => row.id === selectedInvoiceId);
+    if (invoice) queueMicrotask(() => { void openInvoice(invoice, { forceOpen: true }); });
+  }, [loading, months, selectedInvoiceId, selectedInvoice?.id, openInvoice, setSelectedInvoiceId]);
 
   const renderInvoiceItems = (invoice: PurchaseInvoice) => {
     if (selectedInvoice?.id !== invoice.id) return null;
@@ -367,7 +377,7 @@ export default function PurchasesPage({
   }, [focusItemId, focusTranId, focusRequestKey, items]);
 
   return (
-    <div className={`mx-auto w-full px-3 py-4 sm:px-4 ${tableView ? "max-w-5xl" : "max-w-3xl"}`}>
+    <div className={`mx-auto w-full px-1 py-1 sm:px-4 sm:py-4 ${tableView ? "max-w-5xl" : "max-w-3xl"}`}>
       {message && (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {message}
@@ -397,6 +407,7 @@ export default function PurchasesPage({
                   onClick={() => {
                     setOpenMonth(expanded ? "" : month.MonthKey);
                     setSelectedInvoice(null);
+                    setSelectedInvoiceId(null);
                     setItems([]);
                     setMessage("");
                   }}

@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useMobileAccess } from "../context/mobileAccess";
 import API from "../services/api";
+import { navigationKey, readNavigation, saveNavigation } from "../services/navigationState";
+import { useTaskState } from "../hooks/useTaskState";
 import CompaniesPage, { type CompaniesPageHandle } from "./CompaniesPage";
 import PortalOrders from "./PortalOrders";
 import RecentPurchases from "./RecentPurchases";
@@ -36,20 +38,25 @@ const outstandingStatus = (invoice: OutstandingInvoice): "PENDING" | "PART" => {
 };
 
 const task = "flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl text-center text-sm font-semibold transition hover:bg-white/70 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:text-base";
+const savedViews: View[] = ["home", "companies", "orders", "credit", "purchases", "outstanding", "arrivals", "rack", "customer_information", "recent_purchases"];
 
 export default function CustomerPortalPage({ linked }: { linked: boolean }) {
   const access = useMobileAccess();
-  const [view, setView] = useState<View>("home");
+  const savedNavigationKey = navigationKey(access.data?.account.userId ?? 0, access.customer?.customerId ?? null);
+  const [view, setView] = useState<View>(() => {
+    const saved = readNavigation(savedNavigationKey).view;
+    return savedViews.includes(saved as View) ? saved as View : "home";
+  });
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [outstanding, setOutstanding] = useState<OutstandingInvoice[]>([]);
   const outstandingListRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerQuery, setCustomerQuery] = useTaskState("customer-portal", "customer-query", "", (value): value is string => typeof value === "string");
   const [selectingCustomer, setSelectingCustomer] = useState(false);
   const companiesRef = useRef<CompaniesPageHandle>(null);
   const rackRequestKey = useRef(0);
-  const [rackTarget, setRackTarget] = useState<RackTarget | null>(null);
+  const [rackTarget, setRackTarget] = useTaskState<RackTarget | null>("customer-portal", "rack-target", null, (value): value is RackTarget | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as RackTarget).id)));
   const [purchaseFocus, setPurchaseFocus] = useState<{ invoiceId: number; itemId: number; tranId: number; requestKey: number } | null>(null);
   const [companyFocus, setCompanyFocus] = useState<{ itemId: number; requestKey: number } | null>(null);
   const isInternal = access.data?.account.kind === "INTERNAL";
@@ -58,7 +65,10 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
   const showCustomerTasks = ["orders", "credit_notes", "invoices", "outstanding"].some(access.can) || (access.can("catalog") && !hasInternalTask("internal_catalog")) || (access.can("arrivals") && !hasInternalTask("internal_arrivals"));
   const viewPermission: Record<Exclude<View, "home">, string> = { companies: "catalog", orders: "orders", credit: "credit_notes", purchases: "invoices", outstanding: "outstanding", arrivals: "arrivals", rack: "update_rack", customer_information: "update_customer_information", recent_purchases: "list_recent_purchases" };
   const internalView = view === "rack" || view === "customer_information" || view === "recent_purchases";
-  const visibleView = view === "home" || (access.can(viewPermission[view]) && (!internalView || access.data?.account.kind === "INTERNAL")) ? view : "home";
+  const visibleView = view === "home" || (access.can(viewPermission[view]) && (!internalView || access.data?.account.kind === "INTERNAL") && (linked || !["orders", "credit", "purchases", "outstanding"].includes(view))) ? view : "home";
+  useEffect(() => {
+    saveNavigation(savedNavigationKey, { view: visibleView });
+  }, [savedNavigationKey, visibleView]);
   useEffect(() => {
     if (view !== "purchases" || !linked) return;
     let active = true;
@@ -93,7 +103,7 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
     };
   }, [visibleView, outstanding.length, error, message]);
 
-  const goHome = () => { setRackTarget(null); setView("home"); setError(""); setMessage(""); };
+  const goHome = () => { setRackTarget(null); saveNavigation(savedNavigationKey, { view: "home", companyId: null }); setView("home"); setError(""); setMessage(""); };
   const returnToRackSource = (updatedRackNumber?: string) => {
     if (!rackTarget) { goHome(); return; }
     if (rackTarget.source === "purchases") {
@@ -116,7 +126,7 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
     goHome();
   };
 
-  return <section className={`mx-auto w-full space-y-4 px-4 pt-1 ${visibleView === "recent_purchases" ? "max-w-6xl" : "max-w-3xl"} ${visibleView === "credit" || visibleView === "companies" || visibleView === "arrivals" ? "pb-0" : visibleView === "home" && !(isInternal && linked) ? "pb-5" : "pb-24"}`}>
+  return <section className={`mx-auto w-full space-y-4 pt-1 ${visibleView === "home" ? "px-4" : "px-1 sm:px-4"} ${visibleView === "recent_purchases" ? "max-w-6xl" : "max-w-3xl"} ${["credit", "companies", "arrivals", "rack", "customer_information", "orders"].includes(visibleView) ? "pb-0" : visibleView === "home" && !(isInternal && linked) ? "pb-5" : "pb-16"}`}>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {message && <p role="status" className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{message}</p>}
     {visibleView === "home" && <>
@@ -172,7 +182,7 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
       setView("rack");
     }} focusInvoiceId={purchaseFocus?.invoiceId} focusItemId={purchaseFocus?.itemId} focusTranId={purchaseFocus?.tranId} focusRequestKey={purchaseFocus?.requestKey} />}
     {(visibleView === "companies" || (visibleView === "rack" && rackTarget?.source === "companies")) && <div className={visibleView === "companies" ? "" : "hidden"} aria-hidden={visibleView !== "companies"}>
-      <CompaniesPage ref={companiesRef} compactTop showItemSearch={isInternal} canUpdateCompany={false} canUpdateRack={hasInternalTask("update_rack")} doubleTapToEditRack focusItemId={companyFocus?.itemId} focusRequestKey={companyFocus?.requestKey} onEditRack={(item) => {
+      <CompaniesPage ref={companiesRef} navigationStateKey={savedNavigationKey} compactTop showItemSearch={isInternal} canUpdateCompany={false} canUpdateRack={hasInternalTask("update_rack")} doubleTapToEditRack focusItemId={companyFocus?.itemId} focusRequestKey={companyFocus?.requestKey} onEditRack={(item) => {
         if (!hasInternalTask("update_rack")) return;
         setRackTarget({ source: "companies", id: item.id, itemName: item.ItemName, stock: item.stock, requestKey: ++rackRequestKey.current });
         setView("rack");

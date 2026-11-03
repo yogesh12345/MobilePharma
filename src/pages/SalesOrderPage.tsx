@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useTaskState } from "../hooks/useTaskState";
 import API from "../services/api";
 import GenericAutoComplete from "../components/GenericAutoComplete";
 import FloatingLabelDecimalInput from "../components/FloatingLabelDecimalInput";
@@ -428,37 +429,38 @@ export default function SalesOrderPage({
   customerUpdate,
   customerUpdateFocusRequestKey = 0,
 }: SalesOrderPageProps) {
-  const [activeTab, setActiveTab] = useState<"place" | "review">("place");
+  const task = customerProfileMode ? "sales-order-profile" : "sales-order-internal";
+  const [activeTab, setActiveTab] = useTaskState<"place" | "review">(task, "tab", "place", (value): value is "place" | "review" => value === "place" || value === "review");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<OrderListRow[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<LoadedOrder | null>(null);
-  const [customerQuery, setCustomerQuery] = useState("");
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [loadedCartSignature, setLoadedCartSignature] = useState("");
-  const [cartSearch, setCartSearch] = useState("");
-  const [itemQuery, setItemQuery] = useState("");
-  const [selectedItem, setSelectedItem] = useState<ItemInfo | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useTaskState<Customer | null>(task, "customer", null, (value): value is Customer | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as Customer).id)));
+  const [selectedOrder, setSelectedOrder] = useTaskState<LoadedOrder | null>(task, "order", null, (value): value is LoadedOrder | null => value === null || (typeof value === "object" && value !== null && typeof (value as LoadedOrder).header === "object"));
+  const [customerQuery, setCustomerQuery] = useTaskState(task, "customer-query", "", (value): value is string => typeof value === "string");
+  const [cart, setCart] = useTaskState<CartItem[]>(task, "cart", [], (value): value is CartItem[] => Array.isArray(value));
+  const [loadedCartSignature, setLoadedCartSignature] = useTaskState(task, "loaded-cart-signature", "", (value): value is string => typeof value === "string");
+  const [cartSearch, setCartSearch] = useTaskState(task, "cart-search", "", (value): value is string => typeof value === "string");
+  const [itemQuery, setItemQuery] = useTaskState(task, "item-query", "", (value): value is string => typeof value === "string");
+  const [selectedItem, setSelectedItem] = useTaskState<ItemInfo | null>(task, "item", null, (value): value is ItemInfo | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as ItemInfo).id)));
   const [loadingSelectedItem, setLoadingSelectedItem] = useState(false);
-  const [editingCartUid, setEditingCartUid] = useState<string | null>(null);
-  const [itemSourceTab, setItemSourceTab] = useState<"search" | "companies">("search");
+  const [editingCartUid, setEditingCartUid] = useTaskState<string | null>(task, "editing-cart-uid", null, (value): value is string | null => value === null || typeof value === "string");
+  const [itemSourceTab, setItemSourceTab] = useTaskState<"search" | "companies">(task, "item-source-tab", "search", (value): value is "search" | "companies" => value === "search" || value === "companies");
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
-  const [companySearch, setCompanySearch] = useState("");
-  const [selectedCompany, setSelectedCompany] = useState<CompanyRow | null>(null);
-  const [companyItems, setCompanyItems] = useState<ItemInfo[]>([]);
+  const [companySearch, setCompanySearch] = useTaskState(task, "company-search", "", (value): value is string => typeof value === "string");
+  const [selectedCompany, setSelectedCompany] = useTaskState<CompanyRow | null>(task, "company", null, (value): value is CompanyRow | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as CompanyRow).id)));
+  const [companyItems, setCompanyItems] = useTaskState<ItemInfo[]>(task, "company-items", [], (value): value is ItemInfo[] => Array.isArray(value));
   const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [loadingCompanyItems, setLoadingCompanyItems] = useState(false);
-  const [reviewAddingItem, setReviewAddingItem] = useState(false);
-  const [qty1, setQty1] = useState(1);
-  const [qty2, setQty2] = useState(0);
+  const [reviewAddingItem, setReviewAddingItem] = useTaskState(task, "review-adding-item", false, (value): value is boolean => typeof value === "boolean");
+  const [qty1, setQty1] = useTaskState(task, "qty1", 1, (value): value is number => typeof value === "number" && Number.isFinite(value));
+  const [qty2, setQty2] = useTaskState(task, "qty2", 0, (value): value is number => typeof value === "number" && Number.isFinite(value));
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [draftSoNumber, setDraftSoNumber] = useState("New");
-  const [draftSoDate, setDraftSoDate] = useState(todayISODate());
-  const [newOrderSavedId, setNewOrderSavedId] = useState<number | null>(null);
-  const [savedCartSignature, setSavedCartSignature] = useState("");
-  const [showCart, setShowCart] = useState(false);
+  const [draftSoNumber, setDraftSoNumber] = useTaskState(task, "draft-so-number", "New", (value): value is string => typeof value === "string");
+  const [draftSoDate, setDraftSoDate] = useTaskState(task, "draft-so-date", todayISODate(), (value): value is string => typeof value === "string");
+  const [newOrderSavedId, setNewOrderSavedId] = useTaskState<number | null>(task, "saved-order-id", null, (value): value is number | null => value === null || Number.isSafeInteger(value));
+  const [savedCartSignature, setSavedCartSignature] = useTaskState(task, "saved-cart-signature", "", (value): value is string => typeof value === "string");
+  const [showCart, setShowCart] = useTaskState(task, "show-cart", false, (value): value is boolean => typeof value === "boolean");
   const [shareFormat, setShareFormat] = useState<SalesOrderShareFormat>(() => {
     const saved = window.localStorage.getItem("sales-order-share-format");
     return saved === "image" || saved === "text" ? saved : "pdf";
@@ -1492,7 +1494,7 @@ export default function SalesOrderPage({
     );
 
     return (
-    <div className={`mx-auto w-full max-w-3xl px-3 pb-4 sm:px-4 ${customerProfileMode ? "pt-1" : "pt-4"}`}>
+    <div className={`mx-auto w-full max-w-3xl px-1 pt-1 pb-4 sm:px-4 ${customerProfileMode ? "" : "sm:pt-4"}`}>
       <section ref={entryCardRef} className={`${customerProfileMode ? "overflow-y-auto" : "overflow-hidden"} rounded-xl border border-blue-200 bg-white shadow-sm`}>
         {!customerProfileMode && <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-3 py-2">
           <div
@@ -1964,10 +1966,10 @@ export default function SalesOrderPage({
 
   if (selectedCustomer && !selectedOrder) return renderEntry(false);
   if (selectedOrder) return renderEntry(true);
-  if (customerProfileMode) return <div className="mx-auto max-w-3xl px-4 py-5 text-sm text-slate-700">{loading ? "Loading your linked customer profile..." : message || "Customer profile is not linked."}</div>;
+  if (customerProfileMode) return <div className="mx-auto max-w-3xl px-1 py-1 text-sm text-slate-700 sm:px-4 sm:py-5">{loading ? "Loading your linked customer profile..." : message || "Customer profile is not linked."}</div>;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
+    <div className="mx-auto w-full max-w-3xl px-1 py-1 sm:px-4 sm:py-4">
       <div className="mb-3 grid grid-cols-2 rounded-lg border border-blue-200 bg-white p-1 shadow-sm">
         <button
           type="button"

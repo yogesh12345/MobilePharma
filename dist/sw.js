@@ -1,4 +1,4 @@
-const CACHE_NAME = "pharmasys-pwa-v3";
+const CACHE_NAME = "pharmasys-pwa-v4";
 const PRECACHE_URLS = [
   "./",
   "./index.html",

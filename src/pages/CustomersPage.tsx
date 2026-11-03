@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
+import { useTaskState } from "../hooks/useTaskState";
 
 type Customer = {
   id: number;
@@ -60,14 +61,14 @@ export default function CustomersPage({
   onBackToSalesOrder,
 }: CustomersPageProps) {
   const [areas, setAreas] = useState<Area[]>([]);
-  const [expandedArea, setExpandedArea] = useState<string>("");
-  const [areaSearch, setAreaSearch] = useState("");
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [selected, setSelected] = useState<Customer | null>(null);
-  const [mobile, setMobile] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-  const [email, setEmail] = useState("");
-  const [gstNo, setGstNo] = useState("");
+  const [expandedArea, setExpandedArea] = useTaskState("customers", "area", "", (value): value is string => typeof value === "string");
+  const [areaSearch, setAreaSearch] = useTaskState("customers", "area-search", "", (value): value is string => typeof value === "string");
+  const [customerSearch, setCustomerSearch] = useTaskState("customers", "customer-search", "", (value): value is string => typeof value === "string");
+  const [selected, setSelected] = useTaskState<Customer | null>("customers", "selected", null, (value): value is Customer | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as Customer).id)));
+  const [mobile, setMobile] = useTaskState("customers", "mobile", "", (value): value is string => typeof value === "string");
+  const [whatsapp, setWhatsapp] = useTaskState("customers", "whatsapp", "", (value): value is string => typeof value === "string");
+  const [email, setEmail] = useTaskState("customers", "email", "", (value): value is string => typeof value === "string");
+  const [gstNo, setGstNo] = useTaskState("customers", "gst", "", (value): value is string => typeof value === "string");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -241,7 +242,7 @@ export default function CustomersPage({
 
   if (selected) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-3 py-4 pb-24 sm:px-4">
+      <div className="mx-auto w-full max-w-3xl px-1 py-1 pb-16 sm:px-4 sm:py-4">
         <button
           type="button"
           onClick={() => returnToSourceView()}
@@ -382,7 +383,7 @@ export default function CustomersPage({
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
+    <div className="mx-auto w-full max-w-3xl px-1 py-1 sm:px-4 sm:py-4">
       {message && (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {message}

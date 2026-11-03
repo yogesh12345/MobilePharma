@@ -9,6 +9,7 @@ import {
 } from "./context/PermissionContext";
 import API, { setApiToken } from "./services/api";
 import { getStoredToken, removeStoredToken } from "./services/storage";
+import { clearNavigation } from "./services/navigationState";
 
 type AuthState = "checking" | "authenticated" | "guest";
 
@@ -19,6 +20,7 @@ export default function App() {
   useEffect(() => {
     const handleUnauthorized = () => {
       setApiToken(null);
+      clearNavigation();
       void removeStoredToken();
       void clearCachedPermissions();
       setAuthState("guest");
@@ -86,6 +88,7 @@ export default function App() {
 
   const logout = async () => {
     setApiToken(null);
+    clearNavigation();
     await removeStoredToken();
     await clearCachedPermissions();
     setAuthState("guest");

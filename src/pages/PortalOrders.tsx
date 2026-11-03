@@ -3,15 +3,16 @@ import API from "../services/api";
 import GenericAutoComplete from "../components/GenericAutoComplete";
 import SalesOrderPage from "./SalesOrderPage";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { useTaskState } from "../hooks/useTaskState";
 type Order = { id: number; soNumber: string; soDate: string; status: string; numItems: number };
 type Item = { itemId: number; itemName: string; quantity: number; freeQuantity: number };
 const errorText = (error: unknown) => (error as { response?: { data?: { error?: string } } }).response?.data?.error ?? "Unable to load or save the order.";
 export default function PortalOrders({ onBack }: { onBack: () => void }) {
- const [creating,setCreating] = useState(false);
+ const [creating,setCreating] = useTaskState("portal-orders", "creating", false, (value): value is boolean => typeof value === "boolean");
  const [orders,setOrders] = useState<Order[]>([]);
- const [selected,setSelected] = useState<Order | null>(null);
- const [items,setItems] = useState<Item[]>([]);
- const [remark,setRemark] = useState("");
+ const [selected,setSelected] = useTaskState<Order | null>("portal-orders", "selected", null, (value): value is Order | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as Order).id)));
+ const [items,setItems] = useTaskState<Item[]>("portal-orders", "items", [], (value): value is Item[] => Array.isArray(value));
+ const [remark,setRemark] = useTaskState("portal-orders", "remark", "", (value): value is string => typeof value === "string");
  const [query,setQuery] = useState("");
  const [error,setError] = useState("");
  const [notice,setNotice] = useState("");
@@ -29,7 +30,7 @@ export default function PortalOrders({ onBack }: { onBack: () => void }) {
  };
  if (creating) return <SalesOrderPage customerProfileMode onBackToHome={() => { setCreating(false);void load(); }} />;
  const editable = selected && ["SUBMITTED","SAVED"].includes(selected.status);
- return <section className="mx-auto max-w-3xl space-y-4 px-3 py-4">
+ return <section className="mx-auto max-w-3xl space-y-4 px-1 py-1 sm:px-4 sm:py-4">
   <h2 className="text-xl font-bold">Orders</h2>
   {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error}</p>}{notice && <p role="status" className="rounded bg-green-50 p-3 text-green-800">{notice}</p>}
   <button className="rounded bg-blue-700 px-4 py-3 font-semibold text-white" onClick={() => setCreating(true)}>Place a new order</button>

@@ -5,19 +5,21 @@ import FloatingLabelInput from "../components/FloatingLabelInput";
 import FloatingLabelSelect from "../components/FloatingLabelSelect";
 import { emptyForm, profileFormFromResponse, profileSavePayload } from "./profileForm";
 import type { ProfileForm } from "./profileForm";
+import { useTaskState } from "../hooks/useTaskState";
 
 const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 
 export default function Profile({ onOpenCredentials, onBack, onUsernameChange, onProfileSaved, onCredentialsChanged, onStatusChange }: { onOpenCredentials?: () => void; onBack: () => void; onUsernameChange?: (name: string) => void; onProfileSaved?: (profile: { status: string; customerId: number | null } & Record<string, unknown>) => void; onCredentialsChanged?: () => void; onStatusChange?: (status: string) => void }) {
-  const [form, setForm] = useState<ProfileForm>(emptyForm);
+  const [form, setForm] = useTaskState<ProfileForm>("profile", "form", emptyForm, (value): value is ProfileForm => typeof value === "object" && value !== null && typeof (value as ProfileForm).username === "string");
+  const [draftDirty, setDraftDirty] = useTaskState("profile", "draft-dirty", false, (value): value is boolean => typeof value === "boolean");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ProfileForm, string>>>({});
   const [success, setSuccess] = useState("");
   const [status, setStatus] = useState("");
-  const [resetOpen, setResetOpen] = useState(false);
-  const [resetUsername, setResetUsername] = useState("");
+  const [resetOpen, setResetOpen] = useTaskState("profile", "reset-open", false, (value): value is boolean => typeof value === "boolean");
+  const [resetUsername, setResetUsername] = useTaskState("profile", "reset-username", "", (value): value is string => typeof value === "string");
   const [presentPassword, setPresentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -28,22 +30,24 @@ export default function Profile({ onOpenCredentials, onBack, onUsernameChange, o
     let active = true;
     API.get("/mobile/profile").then(({ data }) => {
       if (!active) return;
-      setForm(profileFormFromResponse(data.profile, data.username, data.emailId));
+      if (!draftDirty) setForm(profileFormFromResponse(data.profile, data.username, data.emailId));
       setStatus(data.profile?.status ?? "");
       onStatusChange?.(String(data.profile?.status ?? ""));
     }).catch((err) => {
       if (active) setError(err?.response?.data?.error ?? "Unable to load profile.");
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [onStatusChange]);
+  }, [onStatusChange, draftDirty, setForm]);
 
   const set = (key: keyof ProfileForm) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm((current) => ({ ...current, [key]: event.target.value }));
+    setDraftDirty(true);
     setFieldErrors((current) => ({ ...current, [key]: undefined }));
   };
 
   const setCategory = (value: string) => {
     setForm((current) => ({ ...current, category: value }));
+    setDraftDirty(true);
     setFieldErrors((current) => ({ ...current, category: undefined }));
   };
 
@@ -62,6 +66,7 @@ export default function Profile({ onOpenCredentials, onBack, onUsernameChange, o
       const payload = profileSavePayload(form);
       const { data } = await API.put("/mobile/profile", payload);
       setForm(profileFormFromResponse(data.profile, data.username));
+      setDraftDirty(false);
       setStatus(data.profile?.status ?? "");
       onStatusChange?.(String(data.profile?.status ?? ""));
       onUsernameChange?.(data.username);
@@ -95,7 +100,7 @@ export default function Profile({ onOpenCredentials, onBack, onUsernameChange, o
     } finally { setResetBusy(false); }
   };
 
-  return <section className="mx-auto w-full max-w-3xl px-3 pt-5 pb-24 sm:px-4">
+  return <section className="mx-auto w-full max-w-3xl px-1 pt-1 pb-20 sm:px-4 sm:pt-5">
     {loading ? <p className="text-sm text-slate-600">Loading profile...</p> : <form onSubmit={save} className="space-y-5">
       {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {success && <p role="status" className="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">{success}</p>}
