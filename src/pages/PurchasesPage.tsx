@@ -43,6 +43,7 @@ interface PurchasesPageProps {
     tranId: number;
   }) => void;
   canUpdateRack?: boolean;
+  doubleTapToEditRack?: boolean;
   focusInvoiceId?: number | null;
   focusItemId?: number | null;
   focusTranId?: number | null;
@@ -161,6 +162,7 @@ export default function PurchasesPage({
   tableView = false,
   onEditRack,
   canUpdateRack = true,
+  doubleTapToEditRack = false,
   focusInvoiceId = null,
   focusItemId = null,
   focusTranId = null,
@@ -176,6 +178,12 @@ export default function PurchasesPage({
 
   const itemRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const itemRequestKeyRef = useRef(0);
+  const lastItemTapRef = useRef<{ tranId: number; time: number } | null>(null);
+
+  const editRack = (item: PurchaseItem, invoiceId: number) => {
+    if (!canUpdateRack) return;
+    onEditRack?.({ id: item.ItemID, ItemName: item.ItemName, invoiceId, tranId: item.TranID });
+  };
 
   const invoiceById = useMemo(() => {
     const index: Record<number, PurchaseInvoice> = {};
@@ -265,6 +273,18 @@ export default function PurchasesPage({
           items.map((item, index) => (
             <div
               key={item.TranID}
+              onDoubleClick={doubleTapToEditRack ? () => editRack(item, invoice.id) : undefined}
+              onTouchEnd={doubleTapToEditRack && canUpdateRack ? (event) => {
+                const now = Date.now();
+                const previous = lastItemTapRef.current;
+                if (previous?.tranId === item.TranID && now - previous.time < 400) {
+                  event.preventDefault();
+                  lastItemTapRef.current = null;
+                  editRack(item, invoice.id);
+                } else {
+                  lastItemTapRef.current = { tranId: item.TranID, time: now };
+                }
+              } : undefined}
               className={`block w-full border-b border-blue-200 px-3 py-3 text-left transition-colors last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
                 focusTranId === item.TranID || (!focusTranId && focusItemId === item.ItemID)
                   ? "bg-amber-50 ring-2 ring-inset ring-amber-300"
@@ -279,16 +299,9 @@ export default function PurchasesPage({
                     itemRefs.current[item.TranID] = element;
                   }}
                   type="button"
-                  onClick={() =>
-                    canUpdateRack
-                      ? onEditRack?.({
-                          id: item.ItemID,
-                          ItemName: item.ItemName,
-                          invoiceId: selectedInvoice.id,
-                          tranId: item.TranID,
-                        })
-                      : undefined
-                  }
+                  onClick={(event) => {
+                    if (!doubleTapToEditRack || event.detail === 0) editRack(item, invoice.id);
+                  }}
                   disabled={!canUpdateRack}
                   className={`min-w-0 text-left font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     canUpdateRack
@@ -297,7 +310,7 @@ export default function PurchasesPage({
                   }`}
                   title={
                     canUpdateRack
-                      ? "Open this item in Update Rack"
+                      ? doubleTapToEditRack ? "Double tap to open this item in Update Rack" : "Open this item in Update Rack"
                       : "View-only access"
                   }
                 >

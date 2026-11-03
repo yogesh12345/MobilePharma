@@ -5,6 +5,10 @@ export const mobileBackendUpdateMessage = "The server needs an update before Mob
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const positiveID = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+const mobileCustomer = (customer: unknown) => record(customer) && positiveID(customer.customerId)
+  && typeof customer.customerName === "string" && typeof customer.gstNo === "string"
+  && typeof customer.owner === "boolean" && Array.isArray(customer.permissions)
+  && customer.permissions.every((permission: unknown) => typeof permission === "string");
 
 export function isMobileAccessData(value: unknown): value is AccessData {
   if (!record(value) || !record(value.account) || !record(value.user) || !Array.isArray(value.customers)) return false;
@@ -14,10 +18,8 @@ export function isMobileAccessData(value: unknown): value is AccessData {
     && (value.taskPermissions == null || (Array.isArray(value.taskPermissions) && value.taskPermissions.every((permission: unknown) => typeof permission === "string")))
     && ["username", "name", "email", "whatsapp"].every((key) => typeof user[key] === "string")
     && typeof user.emailVerified === "boolean" && typeof user.whatsappVerified === "boolean"
-    && customers.every((customer) => record(customer) && positiveID(customer.customerId)
-      && typeof customer.customerName === "string" && typeof customer.gstNo === "string"
-      && typeof customer.owner === "boolean" && Array.isArray(customer.permissions)
-      && customer.permissions.every((permission: unknown) => typeof permission === "string"));
+    && customers.every(mobileCustomer)
+    && (value.selectedCustomer == null || mobileCustomer(value.selectedCustomer));
 }
 
 export function mobileAccessErrorMessage(error: unknown): string {

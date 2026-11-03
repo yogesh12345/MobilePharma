@@ -57,7 +57,13 @@ def main() -> None:
                 if path.is_file():
                     bundle.write(path, "dist/" + path.relative_to(archive_root).as_posix())
             for name in SOURCE_FILES:
-                bundle.write(ROOT / name, "source/" + name)
+                if name.endswith(".sh"):
+                    bundle.writestr(
+                        "source/" + name,
+                        (ROOT / name).read_bytes().replace(b"\r\n", b"\n"),
+                    )
+                else:
+                    bundle.write(ROOT / name, "source/" + name)
             for name in SOURCE_DIRS:
                 for path in sorted((ROOT / name).rglob("*")):
                     if path.is_file():

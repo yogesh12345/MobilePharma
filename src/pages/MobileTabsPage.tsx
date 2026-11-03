@@ -27,6 +27,7 @@ interface MobileTabsPageProps {
 }
 
 type RackTarget = {
+  stock?: import("../utils/stockDisplay").CurrentStock | null;
   id: number;
   itemName: string;
   requestKey: number;
@@ -260,7 +261,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     setActiveModule("salesOrders");
   };
 
-  const openItemInRack = (item: { id: number; ItemName: string }) => {
+  const openItemInRack = (item: { id: number; ItemName: string; stock?: import("../utils/stockDisplay").CurrentStock | null }) => {
     if (!canUpdateRack) return;
 
     setRackTarget({
@@ -268,6 +269,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
       itemName: item.ItemName,
       requestKey: Date.now(),
       returnTo: "companies",
+      stock: item.stock,
     });
 
     openModule("rack");

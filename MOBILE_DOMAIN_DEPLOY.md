@@ -36,6 +36,21 @@ block, test the configuration, and reload Nginx. This forwards the current
 frontend's request to the already running Go `/stock/current/` handler, so a
 frontend rebuild is not required for this specific stock fix.
 
+Batch details use `GET /stock/closing/item/:itemId?asOfDate=YYYY-MM-DD`,
+which is separate from the total-stock request. The live mobile host currently
+returns the app's HTML for this path, while the API host returns JSON. Add the
+`location ^~ /stock/` block from `deploy/nginx-pharma-server-8082.conf` to
+`/etc/nginx/sites-enabled/mobile-app`, then run `sudo nginx -t` and
+`sudo systemctl reload nginx`. A frontend rebuild is not needed for this fix.
+Check the response with:
+
+```bash
+curl -i "https://mobile.meenaagencies.co.in/stock/closing/item/1?asOfDate=$(date +%F)"
+```
+
+It must return HTTP 200 with `Content-Type: application/json` and a `Rows`
+array. The deployment script now checks this route before copying the build.
+
 ## Account-access API requirement
 
 The current app requires `GET /mobile/access`. If the app opens but shows an
@@ -104,7 +119,8 @@ files change.
 
 If using the existing Go backend without the new mobile stock route, update
 `/etc/nginx/sites-enabled/mobile-app` so its API location regex includes
-`stock` (as in `deploy/nginx-pharma-server-8082.conf`). Then run
+`stock`, or add the explicit `/stock/` location from
+`deploy/nginx-pharma-server-8082.conf`. Then run
 `sudo nginx -t` and `sudo systemctl reload nginx`. This configuration change
 is required for current stock; copying `dist/` alone cannot fix it.
 

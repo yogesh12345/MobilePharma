@@ -23,6 +23,16 @@ test("rejects HTML fallback, malformed payloads and unsafe permission structures
     assert.equal(isMobileAccessData(value), false);
   }
 });
+
+test("validates searched customer identity and permissions without changing assignments", () => {
+  const value = { ...data(), account: { userId: 1, kind: "INTERNAL", active: true }, taskPermissions: ["search_customer", "orders"], customers: [],
+    selectedCustomer: { customerId: 3, customerName: "Searched customer", gstNo: "", permissions: ["search_customer", "orders"], owner: false } };
+  assert.equal(isMobileAccessData(value), true);
+  assert.equal(isMobileAccessData({ ...value, selectedCustomer: null }), true);
+  for (const selectedCustomer of ["customer", {}, { ...value.selectedCustomer, customerId: -1 }, { ...value.selectedCustomer, permissions: null }, { ...value.selectedCustomer, permissions: [1] }]) {
+    assert.equal(isMobileAccessData({ ...value, selectedCustomer }), false);
+  }
+});
 test("distinguishes missing backend from session, permission, network and service failures", () => {
   assert.equal(mobileAccessErrorMessage({ response: { status: 404 } }), mobileBackendUpdateMessage);
   assert.match(mobileAccessErrorMessage({ response: { status: 401 } }), /session has expired/);

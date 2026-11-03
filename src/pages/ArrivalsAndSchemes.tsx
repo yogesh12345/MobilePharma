@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isAxiosError } from "axios";
 import API from "../services/api";
 import FloatingLabelSelect from "../components/FloatingLabelSelect";
 import FloatingLabelDateInput from "../components/FloatingLabelDateInput";
@@ -51,8 +52,12 @@ export default function ArrivalsAndSchemes() {
       signal: controller.signal,
     }).then(({ data }) => {
       if (!controller.signal.aborted) setResult({ key: requestKey, items: data.items ?? [], error: "" });
-    }).catch(() => {
-      if (!controller.signal.aborted) setResult({ key: requestKey, items: [], error: "Unable to load results. Please try again." });
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      const responseError = isAxiosError(error) ? error.response?.data?.error : undefined;
+      const status = isAxiosError(error) ? error.response?.status : undefined;
+      const detail = typeof responseError === "string" && responseError.trim() ? responseError : status ? `Request failed (HTTP ${status}).` : "Cannot reach the server.";
+      setResult({ key: requestKey, items: [], error: `Unable to load results. ${detail}` });
     });
     return () => controller.abort();
   }, [tab, days, threshold, asOf, requestKey, validDate]);
@@ -124,7 +129,7 @@ export default function ArrivalsAndSchemes() {
         {!validDate ? <p role="alert" className="p-4 text-sm text-red-700">Choose a valid date.</p>
           : loading ? <p className="p-4 text-sm text-slate-500">Loading results...</p>
           : current?.error ? <div role="alert" className="p-4 text-sm text-red-700">{current.error} <button type="button" className="underline" onClick={() => setRetry((value) => value + 1)}>Retry</button></div>
-          : !groups.length ? <p className="p-4 text-sm text-slate-500">{tab === "arrivals" ? "No new arrivals match the selected filters." : "No active schemes match the selected filters."}</p>
+          : !groups.length ? <p role="status" className="p-4 text-sm text-slate-600">{tab === "arrivals" ? `No new arrivals in the last ${days} days.` : "No active schemes match the selected date and percentage."}</p>
           : <table className={`w-full border-collapse text-left text-xs sm:text-sm ${tab === "schemes" ? "min-w-[460px]" : "min-w-[360px]"}`}>
             <caption className="sr-only">{tab === "arrivals" ? "New arrivals" : "Active schemes"} grouped by company</caption>
             <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700"><tr>

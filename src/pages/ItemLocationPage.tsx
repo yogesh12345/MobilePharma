@@ -2,18 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import GenericAutoComplete from "../components/GenericAutoComplete";
+import ItemStockDetails from "../components/ItemStockDetails";
+import type { CurrentStock } from "../utils/stockDisplay";
 import type { AutoCompleteItem, ItemDetails } from "../types/item";
 
 interface ItemLocationPageProps {
   onLogout?: () => void;
   showHeader?: boolean;
   canUpdateRack?: boolean;
+  mobileTaskOnly?: boolean;
   rackTarget?: {
     id: number;
     itemName: string;
     requestKey: number;
+    stock?: CurrentStock | null;
   } | null;
-  onRackOperationComplete?: () => void;
+  onRackOperationComplete?: (rackNumber?: string) => void;
 }
 
 type Message = { type: "success" | "error"; text: string } | null;
@@ -30,11 +34,13 @@ export default function ItemLocationPage({
   onLogout,
   showHeader = true,
   canUpdateRack = true,
+  mobileTaskOnly = false,
   rackTarget = null,
   onRackOperationComplete,
 }: ItemLocationPageProps) {
   const [itemQuery, setItemQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<ItemDetails | null>(null);
+  const [selectedStock, setSelectedStock] = useState<CurrentStock | null | undefined>(undefined);
   const [rackNumber, setRackNumber] = useState("");
   const [loadingItem, setLoadingItem] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,12 +98,12 @@ export default function ItemLocationPage({
     }, 0);
   };
 
-  const returnToCompanyList = () => {
+  const returnToCompanyList = (updatedRackNumber?: string) => {
     setSelectedItem(null);
     setRackNumber("");
     setItemQuery("");
     setMessage(null);
-    onRackOperationComplete?.();
+    onRackOperationComplete?.(updatedRackNumber);
   };
 
   const handleCancel = () => {
@@ -113,7 +119,7 @@ export default function ItemLocationPage({
     focusAndSelectItemName();
   };
 
-  const loadItemDetails = async (itemId: string | number, queryText?: string) => {
+  const loadItemDetails = async (itemId: string | number, queryText?: string, stock?: CurrentStock | null) => {
     const numericItemId = Number(itemId);
 
     if (!Number.isFinite(numericItemId) || numericItemId <= 0) {
@@ -125,6 +131,8 @@ export default function ItemLocationPage({
 
     try {
       setLoadingItem(true);
+      setSelectedItem(null);
+      setSelectedStock(stock);
       setMessage(null);
       if (queryText !== undefined) setItemQuery(queryText);
       const unwrap = (value: unknown): Partial<ItemDetails> => {
@@ -148,12 +156,18 @@ export default function ItemLocationPage({
         RackNumber: detailed.RackNumber ?? basic.RackNumber,
       };
       if (!details.ItemName) throw new Error("Item details were returned without an item name.");
+      let companyName = detailed.CompName || basic.CompName || "";
+      if (!companyName) {
+        const companyId = Number(details.vCompanyID || basic.vCompanyID);
+        const { data } = await API.get<{ companies: Array<{ id: number; CompName: string }> }>("/mobile/companies");
+        companyName = data.companies?.find(company => Number(company.id) === companyId)?.CompName ?? "";
+      }
       const selectedDetails: ItemDetails = {
         id: Number(details.id ?? numericItemId),
         ItemName: details.ItemName,
         Packing: details.Packing ?? "",
         BoxPack: details.BoxPack ?? "",
-        CompName: details.CompName || details.CompShort || "",
+        CompName: companyName,
         CompShort: details.CompShort ?? "",
         RackNumber: details.RackNumber ?? "",
       };
@@ -179,7 +193,7 @@ export default function ItemLocationPage({
   // when MobileTabsPage switches to the Update Rack tab.
   useEffect(() => {
     if (!rackTarget) return;
-    void loadItemDetails(rackTarget.id, rackTarget.itemName);
+    void loadItemDetails(rackTarget.id, rackTarget.itemName, rackTarget.stock);
     // requestKey intentionally allows reopening the same item later.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rackTarget?.requestKey]);
@@ -189,7 +203,7 @@ export default function ItemLocationPage({
     try {
       setSaving(true);
       setMessage(null);
-      await API.put(`/item/${selectedItem.id}`, {
+      await API.put(mobileTaskOnly ? `/mobile/rack/${selectedItem.id}` : `/item/${selectedItem.id}`, {
         RackNumber: rackNumber.trim(),
       });
       setSelectedItem((current) =>
@@ -198,7 +212,7 @@ export default function ItemLocationPage({
       setRackNumber(rackNumber.trim());
 
       if (rackTarget && onRackOperationComplete) {
-        returnToCompanyList();
+        returnToCompanyList(rackNumber.trim());
         return;
       }
 
@@ -373,6 +387,8 @@ export default function ItemLocationPage({
                   You have view-only access for rack/location details.
                 </div>
               )}
+
+              <ItemStockDetails key={selectedItem.id} itemId={selectedItem.id} initialStock={selectedStock} />
 
               {message && (
                 <div

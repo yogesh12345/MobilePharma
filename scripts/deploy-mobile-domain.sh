@@ -38,6 +38,14 @@ if [ "$mobile_stock_available" -eq 0 ] && ! printf '%s' "$legacy_stock_type" | g
     exit 1
 fi
 
+batch_stock_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://mobile.meenaagencies.co.in/stock/closing/item/1?asOfDate=$(date +%F)" || true)
+batch_stock_type=$(curl -sS -o /dev/null -w '%{content_type}' --max-time 15 "https://mobile.meenaagencies.co.in/stock/closing/item/1?asOfDate=$(date +%F)" || true)
+if [ "$batch_stock_status" != 200 ] || ! printf '%s' "$batch_stock_type" | grep -qi 'application/json'; then
+    echo "Batch stock is not routed through the mobile hostname (HTTP $batch_stock_status, $batch_stock_type)." >&2
+    echo "Add the /stock/ API proxy in the live Nginx configuration, then test and reload Nginx." >&2
+    exit 1
+fi
+
 sudo mkdir -p "$WEB_ROOT"
 sudo rsync -a dist/ "$WEB_ROOT/"
 

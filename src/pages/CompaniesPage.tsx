@@ -1,6 +1,9 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import API from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
+import GenericAutoComplete from "../components/GenericAutoComplete";
+import type { AutoCompleteItem } from "../types/item";
+import type { CurrentStock as StockValue } from "../utils/stockDisplay";
 import { searchCompanyItems } from "./companyItemSearch";
 
 type CompanyRow = {
@@ -33,16 +36,19 @@ type CurrentStock = {
 };
 
 interface CompaniesPageProps {
+  showItemSearch?: boolean;
   compactTop?: boolean;
-  onEditRack?: (item: { id: number; ItemName: string }) => void;
+  onEditRack?: (item: { id: number; ItemName: string; stock?: StockValue | null }) => void;
   canUpdateCompany?: boolean;
   canUpdateRack?: boolean;
+  doubleTapToEditRack?: boolean;
   focusItemId?: number | null;
   focusRequestKey?: number;
 }
 
 export type CompaniesPageHandle = {
   backToCompaniesList: () => boolean;
+  updateItemRack: (itemId: number, rackNumber: string) => void;
 };
 
 const money = (n: number) =>
@@ -84,10 +90,12 @@ const apiErrorMessage = (error: unknown, fallback: string) =>
 const STOCK_BATCH_SIZE = 10;
 
 const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(function CompaniesPage({
+  showItemSearch = true,
   compactTop = false,
   onEditRack,
   canUpdateCompany = true,
   canUpdateRack = true,
+  doubleTapToEditRack = false,
   focusItemId = null,
   focusRequestKey = 0,
 }: CompaniesPageProps, ref) {
@@ -110,6 +118,11 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
   const [compName, setCompName] = useState("");
   const [compShort, setCompShort] = useState("");
   const [itemSearch, setItemSearch] = useState("");
+  const [globalItemSearch, setGlobalItemSearch] = useState("");
+  const [searchMode, setSearchMode] = useState<"live" | "onCondition">(
+    () => localStorage.getItem("autoCompleteMode") === "onCondition" ? "onCondition" : "live",
+  );
+  const globalSearchRef = useRef<HTMLInputElement>(null);
 
   /*
    * Incremented whenever another company is opened or the selected
@@ -118,6 +131,11 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
    */
   const stockRequestKeyRef = useRef(0);
   const itemButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const lastItemTapRef = useRef<{ itemId: number; time: number } | null>(null);
+
+  const editRack = (item: CompanyItem) => {
+    if (canUpdateRack) onEditRack?.({ id: item.id, ItemName: item.ItemName, stock: currentStock[item.id] ?? null });
+  };
 
   useLayoutEffect(() => {
     if (!selected) return;
@@ -147,7 +165,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
       window.visualViewport?.removeEventListener("resize", updateHeight);
       window.visualViewport?.removeEventListener("scroll", updateHeight);
     };
-  }, [compactTop, selected]);
+  }, [compactTop, selected, focusRequestKey]);
 
   useLayoutEffect(() => {
     if (!compactTop || selected) return;
@@ -359,6 +377,12 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
     }
   };
 
+  const selectGlobalItem = (item: AutoCompleteItem) => {
+    setGlobalItemSearch(item.label1);
+    setMessage("");
+    onEditRack?.({ id: Number(item.id), ItemName: item.label1 });
+  };
+
   const closeCompany = useCallback(() => {
     stockRequestKeyRef.current += 1;
     setSelected(null);
@@ -366,6 +390,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
     setCurrentStock({});
     setStockUnavailableCount(0);
     setItemSearch("");
+    setGlobalItemSearch("");
     setLoadingStock(false);
     setMessage("");
   }, []);
@@ -375,6 +400,9 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
       if (!selected) return false;
       closeCompany();
       return true;
+    },
+    updateItemRack: (itemId, rackNumber) => {
+      setItems(current => current.map(item => item.id === itemId ? { ...item, RackNumber: rackNumber } : item));
     },
   }), [selected, closeCompany]);
 
@@ -582,14 +610,21 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
                     itemButtonRefs.current[item.id] = element;
                   }}
                   type="button"
-                  onClick={() =>
-                    canUpdateRack
-                      ? onEditRack?.({
-                          id: item.id,
-                          ItemName: item.ItemName,
-                        })
-                      : undefined
-                  }
+                  onClick={(event) => {
+                    if (!doubleTapToEditRack || event.detail === 0) editRack(item);
+                  }}
+                  onDoubleClick={doubleTapToEditRack ? () => editRack(item) : undefined}
+                  onTouchEnd={doubleTapToEditRack && canUpdateRack ? (event) => {
+                    const now = Date.now();
+                    const previous = lastItemTapRef.current;
+                    if (previous?.itemId === item.id && now - previous.time < 400) {
+                      event.preventDefault();
+                      lastItemTapRef.current = null;
+                      editRack(item);
+                    } else {
+                      lastItemTapRef.current = { itemId: item.id, time: now };
+                    }
+                  } : undefined}
                   className={`block w-full border-b border-slate-200 px-3 py-3 text-left transition-colors last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
                     canUpdateRack ? "hover:bg-blue-100 active:bg-blue-200" : "cursor-default"
                   } ${
@@ -601,7 +636,7 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
                   }`}
                   title={
                     canUpdateRack
-                      ? "Open this item in Update Rack"
+                      ? doubleTapToEditRack ? "Double tap to open this item in Update Rack" : "Open this item in Update Rack"
                       : "View-only access"
                   }
                 >
@@ -656,6 +691,23 @@ const CompaniesPage = forwardRef<CompaniesPageHandle, CompaniesPageProps>(functi
 
   return (
     <div className={`mx-auto w-full max-w-3xl px-3 pb-4 sm:px-4 ${compactTop ? "pt-1" : "pt-4"}`}>
+      {showItemSearch && <fieldset className="mb-3 min-w-0 rounded-lg border-2 border-blue-400 bg-white px-2 pb-1 focus-within:ring-2 focus-within:ring-blue-100">
+        <legend className="ml-1 px-1 text-sm font-medium text-blue-600">
+          Search Item
+          <button type="button" className="ml-2 rounded px-1 font-bold underline decoration-dotted underline-offset-2" aria-label="Switch item search mode" onClick={() => {
+            const next = searchMode === "live" ? "onCondition" : "live";
+            setSearchMode(next);
+            localStorage.setItem("autoCompleteMode", next);
+            globalSearchRef.current?.focus();
+          }}>[{searchMode === "live" ? " Live " : " Enter key "}]</button>
+        </legend>
+        <GenericAutoComplete ref={globalSearchRef} searchQuery={globalItemSearch} setSearchQuery={setGlobalItemSearch}
+          endpoint="/item/autocomplete" topLabel="Search Item" myplacehoder="Search..." minChars={3} minWords={2}
+          mode={searchMode} setMode={mode => { setSearchMode(mode); localStorage.setItem("autoCompleteMode", mode); }}
+          onSelect={selectGlobalItem} disabled={loading || loadingItems} listWidth="w-full" renderInPortal portalZIndex={1000}
+          secondaryLabels={["label2"]} showLabel5={false} hideFloatingLabel
+          inputClassName="w-full border-0 bg-transparent px-2 py-2 text-gray-900 shadow-none outline-none focus:ring-0" />
+      </fieldset>}
       {message && (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {message}
