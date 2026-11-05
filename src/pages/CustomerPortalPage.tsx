@@ -13,10 +13,11 @@ import ItemLocationPage from "./ItemLocationPage";
 import CustomersPage from "./CustomersPage";
 import GenericAutoComplete from "../components/GenericAutoComplete";
 import PurchasesPage from "./PurchasesPage";
+import StockSalesStatement from "./StockSalesStatement";
 import type { CurrentStock } from "../utils/stockDisplay";
 import { ArrowLeftIcon, BuildingOffice2Icon, ClipboardDocumentListIcon, DocumentTextIcon, ReceiptRefundIcon, ShoppingBagIcon, MapPinIcon, UserGroupIcon, ClockIcon } from "@heroicons/react/24/outline";
 
-type View = "home" | "companies" | "orders" | "credit" | "purchases" | "outstanding" | "arrivals" | "rack" | "customer_information" | "recent_purchases";
+type View = "home" | "companies" | "orders" | "credit" | "purchases" | "outstanding" | "arrivals" | "rack" | "customer_information" | "recent_purchases" | "stock_statement";
 type Invoice = PurchaseInvoice;
 type RackTarget = { id: number; itemName: string; requestKey: number; stock?: CurrentStock | null } & (
   | { source: "purchases"; invoiceId: number; tranId: number }
@@ -38,7 +39,7 @@ const outstandingStatus = (invoice: OutstandingInvoice): "PENDING" | "PART" => {
 };
 
 const task = "flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl text-center text-sm font-semibold transition hover:bg-white/70 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:text-base";
-const savedViews: View[] = ["home", "companies", "orders", "credit", "purchases", "outstanding", "arrivals", "rack", "customer_information", "recent_purchases"];
+const savedViews: View[] = ["home", "companies", "orders", "credit", "purchases", "outstanding", "arrivals", "rack", "customer_information", "recent_purchases", "stock_statement"];
 
 export default function CustomerPortalPage({ linked }: { linked: boolean }) {
   const access = useMobileAccess();
@@ -61,11 +62,11 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
   const [companyFocus, setCompanyFocus] = useState<{ itemId: number; requestKey: number } | null>(null);
   const isInternal = access.data?.account.kind === "INTERNAL";
   const hasInternalTask = (permission: string) => isInternal && !!access.data?.taskPermissions?.includes(permission) && access.can(permission);
-  const showInternalTasks = ["update_rack", "update_customer_information", "list_recent_purchases", "internal_catalog", "internal_arrivals"].some(hasInternalTask) || (!linked && (hasInternalTask("catalog") || hasInternalTask("arrivals")));
+  const showInternalTasks = ["update_rack", "update_customer_information", "list_recent_purchases", "internal_catalog", "internal_arrivals", "company_stock_sales_statement"].some(hasInternalTask) || (!linked && (hasInternalTask("catalog") || hasInternalTask("arrivals")));
   const showCustomerTasks = ["orders", "credit_notes", "invoices", "outstanding"].some(access.can) || (access.can("catalog") && !hasInternalTask("internal_catalog")) || (access.can("arrivals") && !hasInternalTask("internal_arrivals"));
-  const viewPermission: Record<Exclude<View, "home">, string> = { companies: "catalog", orders: "orders", credit: "credit_notes", purchases: "invoices", outstanding: "outstanding", arrivals: "arrivals", rack: "update_rack", customer_information: "update_customer_information", recent_purchases: "list_recent_purchases" };
-  const internalView = view === "rack" || view === "customer_information" || view === "recent_purchases";
-  const visibleView = view === "home" || (access.can(viewPermission[view]) && (!internalView || access.data?.account.kind === "INTERNAL") && (linked || !["orders", "credit", "purchases", "outstanding"].includes(view))) ? view : "home";
+  const viewPermission: Record<Exclude<View, "home">, string> = { companies: "catalog", orders: "orders", credit: "credit_notes", purchases: "invoices", outstanding: "outstanding", arrivals: "arrivals", rack: "update_rack", customer_information: "update_customer_information", recent_purchases: "list_recent_purchases", stock_statement: "company_stock_sales_statement" };
+  const internalView = view === "rack" || view === "customer_information" || view === "recent_purchases" || view === "stock_statement";
+  const visibleView = view === "home" || (access.can(viewPermission[view]) && (!internalView || isInternal) && (view !== "stock_statement" || hasInternalTask("company_stock_sales_statement")) && (linked || !["orders", "credit", "purchases", "outstanding"].includes(view))) ? view : "home";
   useEffect(() => {
     saveNavigation(savedNavigationKey, { view: visibleView });
   }, [savedNavigationKey, visibleView]);
@@ -136,6 +137,7 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
             {hasInternalTask("update_rack") && <button type="button" onClick={() => setView("rack")} className={`${task} text-emerald-900`}><MapPinIcon className="h-11 w-11" aria-hidden="true" /><span>Update Rack No.</span></button>}
             {hasInternalTask("update_customer_information") && <button type="button" onClick={() => setView("customer_information")} className={`${task} text-rose-900`}><UserGroupIcon className="h-11 w-11" aria-hidden="true" /><span>Update Customer Information</span></button>}
             {hasInternalTask("list_recent_purchases") && <button type="button" onClick={() => { setPurchaseFocus(null); setView("recent_purchases"); }} className={`${task} text-amber-900`}><ClockIcon className="h-11 w-11" aria-hidden="true" /><span>List Recent Purchases</span></button>}
+            {hasInternalTask("company_stock_sales_statement") && <button type="button" onClick={() => setView("stock_statement")} className={`${task} text-indigo-900`}><DocumentTextIcon className="h-11 w-11" aria-hidden="true" /><span>Stock &amp; Sales Statement</span></button>}
             {(hasInternalTask("internal_catalog") || (!linked && hasInternalTask("catalog"))) && <button type="button" onClick={() => setView("companies")} className={`${task} text-blue-900`}><BuildingOffice2Icon className="h-11 w-11" aria-hidden="true" /><span>Companies and items</span></button>}
             {(hasInternalTask("internal_arrivals") || (!linked && hasInternalTask("arrivals"))) && <button type="button" onClick={() => setView("arrivals")} className={`${task} text-teal-900`}><ShoppingBagIcon className="h-11 w-11" aria-hidden="true" /><span>New arrivals and schemes</span></button>}
           </div>}
@@ -174,6 +176,7 @@ export default function CustomerPortalPage({ linked }: { linked: boolean }) {
       </div>}
     </>}
     {visibleView === "arrivals" && <ArrivalsAndSchemes />}
+    {visibleView === "stock_statement" && <StockSalesStatement />}
     {visibleView === "rack" && <ItemLocationPage showHeader={false} canUpdateRack={hasInternalTask("update_rack")} mobileTaskOnly rackTarget={rackTarget} onRackOperationComplete={rackTarget ? returnToRackSource : undefined} />}
     {visibleView === "customer_information" && <CustomersPage canUpdateContact />}
     {visibleView === "recent_purchases" && <PurchasesPage canUpdateRack={hasInternalTask("update_rack")} doubleTapToEditRack tableView onEditRack={(item) => {

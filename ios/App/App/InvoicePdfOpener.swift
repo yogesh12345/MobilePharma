@@ -12,16 +12,18 @@ public class InvoicePdfOpener: CAPPlugin, CAPBridgedPlugin, UIDocumentInteractio
     private var documentController: UIDocumentInteractionController?
 
     @objc func open(_ call: CAPPluginCall) {
+        let isText = call.getString("mimeType") == "text/plain"
         guard let base64 = call.getString("data"),
               let data = Data(base64Encoded: base64),
-              data.starts(with: Data("%PDF-".utf8)) else {
+              (isText || data.starts(with: Data("%PDF-".utf8))) else {
             call.reject("The server did not return a valid PDF.")
             return
         }
 
         let requestedName = call.getString("fileName") ?? "invoice.pdf"
         let safeName = requestedName.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
-        let fileName = safeName.hasSuffix(".pdf") ? safeName : safeName + ".pdf"
+        let fileExtension = isText ? ".txt" : ".pdf"
+        let fileName = safeName.hasSuffix(fileExtension) ? safeName : safeName + fileExtension
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
 
         do {
@@ -33,7 +35,7 @@ public class InvoicePdfOpener: CAPPlugin, CAPBridgedPlugin, UIDocumentInteractio
 
         DispatchQueue.main.async {
             let controller = UIDocumentInteractionController(url: fileURL)
-            controller.uti = "com.adobe.pdf"
+            controller.uti = isText ? "public.plain-text" : "com.adobe.pdf"
             controller.delegate = self
             self.documentController = controller
             if controller.presentPreview(animated: true) {

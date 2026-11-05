@@ -2,10 +2,10 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import API from "./api";
 
 type PdfOpener = {
-  open(options: { data: string; fileName: string }): Promise<void>;
+  open(options: { data: string; fileName: string; mimeType?: string }): Promise<void>;
 };
 
-const pdfOpener = registerPlugin<PdfOpener>("InvoicePdfOpener");
+export const documentOpener = registerPlugin<PdfOpener>("InvoicePdfOpener");
 
 export async function openInvoicePdf(invoiceId: number, invoiceYear: number): Promise<void> {
   // Open the browser tab during the button event so popup blockers do not block it.
@@ -26,7 +26,7 @@ export async function openInvoicePdf(invoiceId: number, invoiceYear: number): Pr
         reader.onerror = () => reject(new Error("Unable to read invoice PDF."));
         reader.readAsDataURL(pdf);
       });
-      await pdfOpener.open({ data, fileName });
+      await documentOpener.open({ data, fileName });
       return;
     }
 

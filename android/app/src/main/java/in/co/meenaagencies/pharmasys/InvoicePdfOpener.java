@@ -22,16 +22,18 @@ public class InvoicePdfOpener extends Plugin {
     public void open(PluginCall call) {
         String data = call.getString("data");
         String fileName = call.getString("fileName", "invoice.pdf");
+        boolean isText = "text/plain".equals(call.getString("mimeType"));
         if (data == null || data.isEmpty()) {
             call.reject("Invoice PDF is empty.");
             return;
         }
         fileName = fileName.replaceAll("[^A-Za-z0-9._-]", "_");
-        if (!fileName.endsWith(".pdf")) fileName += ".pdf";
+        String extension = isText ? ".txt" : ".pdf";
+        if (!fileName.endsWith(extension)) fileName += extension;
 
         try {
             byte[] bytes = Base64.decode(data, Base64.DEFAULT);
-            if (bytes.length < 5 || bytes[0] != '%' || bytes[1] != 'P' || bytes[2] != 'D' || bytes[3] != 'F' || bytes[4] != '-') {
+            if (!isText && (bytes.length < 5 || bytes[0] != '%' || bytes[1] != 'P' || bytes[2] != 'D' || bytes[3] != 'F' || bytes[4] != '-')) {
                 call.reject("The server did not return a valid PDF.");
                 return;
             }
@@ -41,12 +43,12 @@ public class InvoicePdfOpener extends Plugin {
             }
             Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(uri, "application/pdf");
+            intent.setDataAndType(uri, isText ? "text/plain" : "application/pdf");
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             getActivity().startActivity(intent);
             call.resolve();
         } catch (ActivityNotFoundException error) {
-            call.reject("No PDF viewer is available on this device.");
+            call.reject(isText ? "No text viewer is available on this device." : "No PDF viewer is available on this device.");
         } catch (IOException | IllegalArgumentException error) {
             call.reject("Unable to open invoice PDF.", error);
         }

@@ -8,6 +8,7 @@ export type PurchaseInvoice = {
   invoiceYear: number;
   invoiceNo: string;
   invoiceDate: string;
+  createdAt: string;
   dueDate: string | null;
   totalGST: number;
   amount: number;
@@ -39,6 +40,7 @@ const date = (value?: string | null) => {
 };
 const money = (value: number) =>
   Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const time = (value?: string | null) => value?.match(/[T ](\d{2}:\d{2}:\d{2})/)?.[1] ?? "—";
 const quantity = (value: number) => Number(value || 0).toLocaleString("en-IN");
 const quantityWithFree = (qty: number, free: number) =>
   Number(free || 0) !== 0 ? `${quantity(qty)}+${quantity(free)}` : quantity(qty);
@@ -148,17 +150,17 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
       <div ref={listRef} className={`${fillViewport ? "" : "max-h-[min(60vh,32rem)]"} overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm`}>
         <table className="w-full table-fixed border-collapse text-left text-[11px] tabular-nums sm:text-sm">
           <colgroup>
-            <col className="w-[23%]" />
-            <col className="w-[25%]" />
-            <col className="w-[20%]" />
-            <col className="w-[32%]" />
+            <col className="w-[20%] sm:w-[23%]" />
+            <col className="w-[24%] sm:w-[25%]" />
+            <col className="w-[34%] sm:w-[32%]" />
+            <col className="w-[22%] sm:w-[20%]" />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
             <tr>
-              <th className="px-1 py-2 font-semibold leading-tight sm:px-2">Invoice Date</th>
-              <th className="px-1 py-2 font-semibold leading-tight sm:px-2">Invoice No.</th>
-              <th className="px-1 py-2 text-right font-semibold leading-tight sm:px-2">Total GST</th>
-              <th className="px-1 py-2 text-right font-semibold leading-tight sm:px-2">Invoice Amount</th>
+              <th className="px-0.5 py-2 font-semibold leading-tight sm:px-2">Inv. Date</th>
+              <th className="px-0.5 py-2 font-semibold leading-tight sm:px-2">Inv No.</th>
+              <th className="px-0.5 py-2 text-right font-semibold leading-tight sm:px-2">Invoice Amount</th>
+              <th className="px-0.5 py-2 text-right font-semibold leading-tight sm:px-2">Time</th>
             </tr>
           </thead>
           <tbody>
@@ -196,10 +198,10 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                       }
                     }}
                   >
-                    <td className="whitespace-nowrap px-1 py-2 sm:px-2">{date(invoice.invoiceDate)}</td>
-                    <td className="break-all px-1 py-2 font-semibold text-blue-900 sm:px-2">{invoice.invoiceNo}</td>
-                    <td className="whitespace-nowrap px-1 py-2 text-right sm:px-2">{money(invoice.totalGST)}</td>
-                    <td className="whitespace-nowrap px-1 py-2 text-right sm:px-2">{money(invoice.amount)}</td>
+                    <td className="whitespace-nowrap px-0.5 py-2 sm:px-2">{date(invoice.invoiceDate)}</td>
+                    <td className="break-all px-0.5 py-2 font-semibold text-blue-900 sm:px-2">{invoice.invoiceNo}</td>
+                    <td className="whitespace-nowrap px-0.5 py-2 text-right sm:px-2">{money(invoice.amount)}</td>
+                    <td className="whitespace-nowrap px-0.5 py-2 text-right sm:px-2">{time(invoice.createdAt)}</td>
                   </tr>
                   {expanded && (
                     <tr className="border-t border-blue-200 bg-blue-50/60">
