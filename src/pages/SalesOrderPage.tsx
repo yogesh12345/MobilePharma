@@ -5,6 +5,9 @@ import GenericAutoComplete from "../components/GenericAutoComplete";
 import FloatingLabelDecimalInput from "../components/FloatingLabelDecimalInput";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { sendMedia, sendText } from "../services/whatsappService";
+import { useMobileAccess } from "../context/mobileAccess";
+import { formatStock } from "../utils/stockDisplay";
+import { useCurrentStock } from "../hooks/useCurrentStock";
 
 type Customer = {
   id: number;
@@ -429,6 +432,20 @@ export default function SalesOrderPage({
   customerUpdate,
   customerUpdateFocusRequestKey = 0,
 }: SalesOrderPageProps) {
+  const access = useMobileAccess();
+  const isInternal = access.data?.account.kind === "INTERNAL";
+  const [showTotalQty, setShowTotalQty] = useState(false);
+  const { stockByItemId, requestStock } = useCurrentStock(showTotalQty && isInternal, todayISODate());
+  useEffect(() => {
+    if (!isInternal) return;
+    let active = true;
+    void API.get("/mobile/sales-orders/access")
+      .then(({ data }) => {
+        if (active) setShowTotalQty(data?.isSalesRepresentative === false);
+      })
+      .catch(() => { if (active) setShowTotalQty(false); });
+    return () => { active = false; };
+  }, [isInternal]);
   const task = customerProfileMode ? "sales-order-profile" : "sales-order-internal";
   const [activeTab, setActiveTab] = useTaskState<"place" | "review">(task, "tab", "place", (value): value is "place" | "review" => value === "place" || value === "review");
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -448,6 +465,9 @@ export default function SalesOrderPage({
   const [companySearch, setCompanySearch] = useTaskState(task, "company-search", "", (value): value is string => typeof value === "string");
   const [selectedCompany, setSelectedCompany] = useTaskState<CompanyRow | null>(task, "company", null, (value): value is CompanyRow | null => value === null || (typeof value === "object" && value !== null && Number.isSafeInteger((value as CompanyRow).id)));
   const [companyItems, setCompanyItems] = useTaskState<ItemInfo[]>(task, "company-items", [], (value): value is ItemInfo[] => Array.isArray(value));
+  useEffect(() => {
+    if (itemSourceTab === "companies") requestStock(companyItems);
+  }, [itemSourceTab, companyItems, requestStock]);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [loadingCompanyItems, setLoadingCompanyItems] = useState(false);
   const [reviewAddingItem, setReviewAddingItem] = useTaskState(task, "review-adding-item", false, (value): value is boolean => typeof value === "boolean");
@@ -1375,6 +1395,11 @@ export default function SalesOrderPage({
     }, 0);
   };
 
+  const currentStockLabel = (itemId: number) => {
+    const stock = stockByItemId[itemId];
+    return `Total Qty: ${stock === undefined ? "…" : stock === null ? "—" : formatStock(stock.ClosingQty1, stock.ClosingQty2)}`;
+  };
+
   const renderItemResultButton = (item: ItemInfo, index: number) => (
     <button
       key={`${item.id}-${index}`}
@@ -1392,7 +1417,9 @@ export default function SalesOrderPage({
         <span className="truncate">{item.CompShort || ""}</span>
         {/* <span className="truncate">Rack: {item.RackNumber || "-"}</span> */}
         <span className="truncate">MRP: {money(item.MRP)}</span>
-        {item.StockAvailable && <span className="shrink-0 font-semibold text-emerald-700">Available</span>}
+        {showTotalQty && isInternal
+          ? <span className="shrink-0 font-semibold text-emerald-700">{currentStockLabel(item.id)}</span>
+          : item.StockAvailable && <span className="shrink-0 font-semibold text-emerald-700">Available</span>}
       </div>
     </button>
   );
@@ -1409,6 +1436,9 @@ export default function SalesOrderPage({
         <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs font-semibold text-slate-700">
           <span>MRP: {loadingSelectedItem ? "..." : money(selectedItem.MRP)}</span>
           <span>Scheme: {loadingSelectedItem ? "..." : selectedItem.Scheme || "-"}</span>
+          {showTotalQty && isInternal && (
+            <span className="text-emerald-700">{currentStockLabel(selectedItem.id)}</span>
+          )}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <FloatingLabelDecimalInput
@@ -1712,6 +1742,8 @@ export default function SalesOrderPage({
                     mode="live"
                     hideFloatingLabel
                     salesOrderItemLayout
+                    onItemsChange={showTotalQty && isInternal ? requestStock : undefined}
+                    salesOrderStockLabel={showTotalQty && isInternal ? row => currentStockLabel(Number(row.id)) : undefined}
                   />
                 )}
 

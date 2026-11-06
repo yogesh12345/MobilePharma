@@ -51,9 +51,12 @@ interface GenericAutoCompleteProps {
   allowRowArrowNavigationWhenClosed?: boolean;
   /** Which secondary labels to show (default: label2-4) */
   secondaryLabels?: Array<"label2" | "label3" | "label4">;
+  formatSecondaryItem?: (item: AutoCompleteItem) => string;
   /** Whether to show label5 (default: true) */
   showLabel5?: boolean;
   salesOrderItemLayout?: boolean;
+  salesOrderStockLabel?: (item: AutoCompleteItem) => string;
+  onItemsChange?: (items: AutoCompleteItem[]) => void;
   /** Hide the floating label block completely when the table/header already provides context */
   hideFloatingLabel?: boolean;
   /** Removes the input border/focus ring when the parent grid already supplies the cell outline. */
@@ -358,8 +361,11 @@ const GenericAutoComplete = React.forwardRef<
       disabled = false,
       allowRowArrowNavigationWhenClosed = false,
       secondaryLabels = ["label2", "label3", "label4"],
+      formatSecondaryItem,
       showLabel5 = true,
       salesOrderItemLayout = false,
+      salesOrderStockLabel,
+      onItemsChange,
       hideFloatingLabel = false,
       disableOutline = false,
       transparentBackground = false,
@@ -374,6 +380,7 @@ const GenericAutoComplete = React.forwardRef<
     const [hasInteracted, setHasInteracted] = useState(false);
     // Data / UI state
     const [items, setItems] = useState<AutoCompleteItem[]>([]);
+    useEffect(() => { onItemsChange?.(items); }, [items, onItemsChange]);
     const [allItems, setAllItems] = useState<AutoCompleteItem[]>([]);
     const [lastQuery, setLastQuery] = useState("");
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -779,11 +786,11 @@ const GenericAutoComplete = React.forwardRef<
             >
               {salesOrderItemLayout ? <>
                 <div className="flex items-baseline justify-between gap-3"><span className="min-w-0 truncate font-medium">{item.label1}</span><span className={`shrink-0 truncate text-xs ${textColor}`}>{item.label2}</span></div>
-                <div className={`mt-1 flex items-center justify-between gap-2 text-xs ${textColor}`}><span className="truncate">{item.label3}</span>{showLabel5 && <span className="truncate">{item.label5}</span>}<span className={`shrink-0 font-semibold ${isHighlighted ? "text-white" : "text-emerald-700"}`}>{item.label6}</span></div>
+                <div className={`mt-1 flex items-center justify-between gap-2 text-xs ${textColor}`}><span className="truncate">{item.label3}</span>{showLabel5 && <span className="truncate">{item.label5}</span>}<span className={`shrink-0 font-semibold ${isHighlighted ? "text-white" : "text-emerald-700"}`}>{salesOrderStockLabel ? salesOrderStockLabel(item) : item.label6}</span></div>
               </> : <>
                 <div className="font-medium">{item.label1}</div>
                 <div className={`${textColor} break-words`}>
-                  {secondaryLabels.map((key) => item[key]).filter(Boolean).map((line, idx) => <div key={idx} className={`${idx === 0 ? "text-sm" : "text-xs"} ${textColor}`}>{line}</div>)}
+                  {formatSecondaryItem ? <div className={`text-sm ${textColor}`}>{formatSecondaryItem(item)}</div> : secondaryLabels.map((key) => item[key]).filter(Boolean).map((line, idx) => <div key={idx} className={`${idx === 0 ? "text-sm" : "text-xs"} ${textColor}`}>{line}</div>)}
                   {showLabel5 && item.label5 && <div className={`text-xs ${textColor}`}>{item.label5}</div>}
                 </div>
               </>}

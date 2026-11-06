@@ -49,11 +49,12 @@ const visibleInvoiceItem = (item: InvoiceItem) =>
   (Number(item.qty || 0) !== 0 || Number(item.free || 0) !== 0);
 const invoiceKey = (invoice: PurchaseInvoice) => `${invoice.invoiceYear}:${invoice.id}`;
 
-export default function RecentPurchases({ invoices, onItemSelect, title = "Recent purchases", fillViewport = false }: {
+export default function RecentPurchases({ invoices, onItemSelect, title = "Recent purchases", fillViewport = false, hideAmounts = false }: {
   invoices: PurchaseInvoice[];
   onItemSelect?: (invoice: PurchaseInvoice, item: InvoiceItem) => void;
   title?: string;
   fillViewport?: boolean;
+  hideAmounts?: boolean;
 }) {
   const [selectedKey, setSelectedKey] = useTaskState<string | null>(onItemSelect ? "claim-invoices" : "recent-purchases", "invoice", null, (value): value is string | null => value === null || typeof value === "string");
   const [itemsByInvoice, setItemsByInvoice] = useState<Record<string, InvoiceItem[]>>({});
@@ -150,16 +151,16 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
       <div ref={listRef} className={`${fillViewport ? "" : "max-h-[min(60vh,32rem)]"} overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm`}>
         <table className="w-full table-fixed border-collapse text-left text-[11px] tabular-nums sm:text-sm">
           <colgroup>
-            <col className="w-[20%] sm:w-[23%]" />
-            <col className="w-[24%] sm:w-[25%]" />
-            <col className="w-[34%] sm:w-[32%]" />
-            <col className="w-[22%] sm:w-[20%]" />
+            <col className={hideAmounts ? "w-[30%] sm:w-[35%]" : "w-[20%] sm:w-[23%]"} />
+            <col className={hideAmounts ? "w-[40%] sm:w-[40%]" : "w-[24%] sm:w-[25%]"} />
+            {!hideAmounts && <col className="w-[34%] sm:w-[32%]" />}
+            <col className={hideAmounts ? "w-[30%] sm:w-[25%]" : "w-[22%] sm:w-[20%]"} />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
             <tr>
               <th className="px-0.5 py-2 font-semibold leading-tight sm:px-2">Inv. Date</th>
               <th className="px-0.5 py-2 font-semibold leading-tight sm:px-2">Inv No.</th>
-              <th className="px-0.5 py-2 text-right font-semibold leading-tight sm:px-2">Invoice Amount</th>
+              {!hideAmounts && <th className="px-0.5 py-2 text-right font-semibold leading-tight sm:px-2">Invoice Amount</th>}
               <th className="px-0.5 py-2 text-right font-semibold leading-tight sm:px-2">Time</th>
             </tr>
           </thead>
@@ -200,16 +201,16 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                   >
                     <td className="whitespace-nowrap px-0.5 py-2 sm:px-2">{date(invoice.invoiceDate)}</td>
                     <td className="break-all px-0.5 py-2 font-semibold text-blue-900 sm:px-2">{invoice.invoiceNo}</td>
-                    <td className="whitespace-nowrap px-0.5 py-2 text-right sm:px-2">{money(invoice.amount)}</td>
+                    {!hideAmounts && <td className="whitespace-nowrap px-0.5 py-2 text-right sm:px-2">{money(invoice.amount)}</td>}
                     <td className="whitespace-nowrap px-0.5 py-2 text-right sm:px-2">{time(invoice.createdAt)}</td>
                   </tr>
                   {expanded && (
                     <tr className="border-t border-blue-200 bg-blue-50/60">
-                      <td colSpan={4} className="px-2 py-3">
+                      <td colSpan={hideAmounts ? 3 : 4} className="px-2 py-3">
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <h3 className="font-semibold">Items in {invoice.invoiceNo} · {date(invoice.invoiceDate)} · {money(invoice.amount)}</h3>
+                          <h3 className="font-semibold">Items in {invoice.invoiceNo} · {date(invoice.invoiceDate)}{!hideAmounts && ` · ${money(invoice.amount)}`}</h3>
                           <div className="flex shrink-0 gap-2">
-                            <button type="button" onClick={() => void printInvoice(invoice)} disabled={printingKey !== null} className="rounded border border-blue-700 bg-blue-700 px-3 py-1 text-sm text-white disabled:opacity-50">{printingKey === key ? "Generating..." : "Print"}</button>
+                            {!hideAmounts && <button type="button" onClick={() => void printInvoice(invoice)} disabled={printingKey !== null} className="rounded border border-blue-700 bg-blue-700 px-3 py-1 text-sm text-white disabled:opacity-50">{printingKey === key ? "Generating..." : "Print"}</button>}
                             <button type="button" onClick={() => setSelectedKey(null)} className="rounded border border-slate-300 bg-white px-3 py-1 text-sm">Close</button>
                           </div>
                         </div>
@@ -219,7 +220,7 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                             <table className="w-auto border-collapse text-left text-[11px]">
                               <thead className="bg-slate-100 text-slate-700">
                                 <tr>
-                                  {["Item Name", "Packing", "Qty+Free", "MRP", ...(onItemSelect ? ["Retail"] : []), "Batch No.", "Expiry", "GST%", "Value"].map((heading) => (
+                                  {["Item Name", "Packing", "Qty+Free", ...(!hideAmounts ? ["MRP", ...(onItemSelect ? ["Retail"] : [])] : []), "Batch No.", "Expiry", "GST%", ...(!hideAmounts ? ["Value"] : [])].map((heading) => (
                                     <th key={heading} className={`whitespace-nowrap px-1 py-1.5 text-xs font-semibold ${["Qty+Free", "MRP", "Retail", "GST%", "Value"].includes(heading) ? "text-right" : "text-left"}`}>{heading}</th>
                                   ))}
                                 </tr>
@@ -243,14 +244,14 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                                   <td className="min-w-36 max-w-48 px-1 py-1.5 text-xs">{item.itemName || "—"}</td>
                                   <td className="whitespace-nowrap px-1 py-1.5 text-xs">{item.packing || "—"}</td>
                                   <td className="whitespace-nowrap px-1 py-1.5 text-right">{quantityWithFree(item.qty, item.free)}</td>
-                                  <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.mrp)}</td>
-                                  {onItemSelect && <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.retailRate)}</td>}
+                                  {!hideAmounts && <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.mrp)}</td>}
+                                  {!hideAmounts && onItemSelect && <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.retailRate)}</td>}
                                   <td className="whitespace-nowrap px-1 py-1.5">{item.batchNo || "—"}</td>
                                   <td className="whitespace-nowrap px-1 py-1.5">{item.expiry || "—"}</td>
                                   <td className="whitespace-nowrap px-1 py-1.5 text-right">{Number(item.gstPercent || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
-                                  <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.value)}</td>
+                                  {!hideAmounts && <td className="whitespace-nowrap px-1 py-1.5 text-right">{money(item.value)}</td>}
                                 </tr>)}
-                                {visibleItems?.length === 0 && <tr><td colSpan={onItemSelect ? 9 : 8} className="px-2 py-3 text-slate-600">No items found for this invoice.</td></tr>}
+                                {visibleItems?.length === 0 && <tr><td colSpan={hideAmounts ? 6 : onItemSelect ? 9 : 8} className="px-2 py-3 text-slate-600">No items found for this invoice.</td></tr>}
                               </tbody>
                             </table>
                           </div>
@@ -261,7 +262,7 @@ export default function RecentPurchases({ invoices, onItemSelect, title = "Recen
                 </Fragment>
               );
             })}
-            {invoices.length === 0 && <tr><td colSpan={4} className="px-3 py-5 text-slate-600">No purchases found.</td></tr>}
+            {invoices.length === 0 && <tr><td colSpan={hideAmounts ? 3 : 4} className="px-3 py-5 text-slate-600">No purchases found.</td></tr>}
           </tbody>
         </table>
       </div>
