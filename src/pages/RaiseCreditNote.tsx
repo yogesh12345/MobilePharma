@@ -128,6 +128,11 @@ export default function RaiseCreditNote() {
   };
   const selectRecentItem = (row: RecentInvoiceItem) => {
     if (addingKey !== null) return;
+    setInvoiceSearch("");
+    setRecentItems([]);
+    setRecentMenuOpen(false);
+    setSearching(false);
+    setSearchError("");
     void addInvoiceItem(row);
   };
   const selectManualItem = async (result: { id: string | number; label1: string }) => {
@@ -191,7 +196,6 @@ export default function RaiseCreditNote() {
           {!items.length && <p className="text-sm text-slate-500">Add an item from A or B.</p>}
         </div>
       </div>
-      <div className={box}><button type="button" disabled={busy || !items.length} onClick={() => void submit()} className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Saving..." : editingClaim ? "Update claim" : "Submit claim"}</button></div>
       <div className={box}>
         <h3 className="mb-2 font-bold">A. Search item from recent invoices</h3>
         <div className="relative pt-3" onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setRecentMenuOpen(false); }}>
@@ -229,6 +233,7 @@ export default function RaiseCreditNote() {
           </div>}
         </div>
       </div>
+      <div className={box}><button type="button" disabled={busy || !items.length || items.some(item => !item.reason)} onClick={() => void submit()} className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Saving..." : editingClaim ? "Update claim" : "Submit claim"}</button></div>
       <div className={box}><h3 className="mb-2 font-bold">Recent claims</h3>{claims.map(claim => <p key={claim.id} className="border-t py-2 text-sm"><strong>{claim.claimNo}</strong> · {shortDate(claim.claimDate)} · {claim.status}{claim.status === "PENDING" && <button type="button" disabled={busy} className="ml-3 text-blue-700 underline" onClick={() => { setEditingClaim(claim);setItems((claim.items ?? []).map((item,index) => ({ ...item,key:`edit:${claim.id}:${index}`,reason:String(item.reason) === "Expire" ? "Expired" : item.reason })));setError("");setSuccess("");containerRef.current?.scrollTo({ top:0,behavior:"smooth" }); }}>Edit</button>}</p>)}{!claims.length && <p className="text-sm text-slate-500">No claims submitted yet.</p>}</div>
     </>}
   </section>;
