@@ -43,6 +43,7 @@ type ItemInfo = {
   Scheme: string;
   SchmQty: number;
   SchmFree: number;
+  Schemes?: Array<{ SchmQty: number; SchmFree: number; SchmRatio: number; SchmUpto: string }>;
   StockQty1: number;
   StockQty2: number;
   StockAvailable: boolean;
@@ -271,6 +272,30 @@ const toNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const validItemSchemes = (item: ItemInfo | null) =>
+  (item?.Schemes ?? [])
+    .filter((scheme) => scheme.SchmUpto?.slice(0, 10) > todayISODate() && scheme.SchmQty > 0 && scheme.SchmFree > 0)
+    .sort((a, b) => a.SchmRatio - b.SchmRatio || a.SchmQty - b.SchmQty || a.SchmFree - b.SchmFree);
+
+const schemeOrderHint = (schemes: NonNullable<ItemInfo["Schemes"]>) =>
+  schemes.flatMap((scheme) => {
+    const multiples = schemes.length === 1 ? 3 : 2;
+    return Array.from({ length: multiples }, (_, index) =>
+      `${scheme.SchmQty * (index + 1)}+${scheme.SchmFree * (index + 1)}`,
+    );
+  }).join(", ");
+
+const freeForOrderQty = (qty: number, schemes: NonNullable<ItemInfo["Schemes"]>) =>
+  Math.max(0, ...schemes.map((scheme) => Math.floor(Math.max(0, qty) / scheme.SchmQty) * scheme.SchmFree));
+
+const freeInputBackground = (qty: number, free: number, schemes: NonNullable<ItemInfo["Schemes"]>) => {
+  if (schemes.length === 0) return "bg-white";
+  const suggestedFree = freeForOrderQty(qty, schemes);
+  if (free > suggestedFree) return "bg-red-50";
+  if (free < suggestedFree) return "bg-green-50";
+  return "bg-white";
+};
+
 const customerGstNo = (row: Partial<Customer>) => String(row.GstNo ?? "");
 
 const customerWhatsappNo = (row: Record<string, unknown> | null | undefined) =>
@@ -491,6 +516,8 @@ export default function SalesOrderPage({
   const qtyInputRef = useRef<HTMLInputElement | null>(null);
   const freeInputRef = useRef<HTMLInputElement | null>(null);
   const itemDetailRequestRef = useRef(0);
+  const lastCompanyItemTapRef = useRef<{ itemId: number; time: number } | null>(null);
+  const lastCompanyTouchSelectionRef = useRef(0);
   const entryCardRef = useRef<HTMLElement>(null);
   const selectedItemId = selectedItem?.id;
 
@@ -791,7 +818,7 @@ export default function SalesOrderPage({
   const handleItemSelect = async (item: { id: number | string; label1: string; label2?: string; item?: unknown }) => {
     const detailFromSearch = item.item as ItemInfo | undefined;
     if (detailFromSearch && Number(detailFromSearch.id) === Number(item.id) && detailFromSearch.ItemName) {
-      selectItemInfo(detailFromSearch);
+      await selectItemInfo(detailFromSearch);
       return;
     }
     const requestId = ++itemDetailRequestRef.current;
@@ -812,12 +839,14 @@ export default function SalesOrderPage({
       Scheme: "",
       SchmQty: 0,
       SchmFree: 0,
+      Schemes: [],
       StockQty1: 0,
       StockQty2: 0,
       StockAvailable: false,
     });
     setLoadingSelectedItem(true);
     setEditingCartUid(null);
+    setQty2(0);
     setShowCart(false);
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLInputElement) activeElement.blur();
@@ -826,6 +855,7 @@ export default function SalesOrderPage({
       if (requestId !== itemDetailRequestRef.current) return;
       if (!detail) throw new Error("Item details are unavailable.");
       setSelectedItem(detail);
+      setQty2(freeForOrderQty(toNumber(qtyInputRef.current?.value ?? qty1), validItemSchemes(detail)));
     } catch {
       if (requestId !== itemDetailRequestRef.current) return;
       setSelectedItem(null);
@@ -835,11 +865,13 @@ export default function SalesOrderPage({
     }
   };
 
-  const selectItemInfo = (item: ItemInfo) => {
-    ++itemDetailRequestRef.current;
-    setLoadingSelectedItem(false);
-    setSelectedItem(item);
+  const selectItemInfo = async (item: ItemInfo) => {
+    const requestId = ++itemDetailRequestRef.current;
+    const hasCurrentSchemes = Array.isArray(item.Schemes) && item.AsOnDate === todayISODate();
+    setLoadingSelectedItem(!hasCurrentSchemes);
+    setSelectedItem(hasCurrentSchemes ? item : { ...item, Schemes: [] });
     setEditingCartUid(null);
+    setQty2(hasCurrentSchemes ? freeForOrderQty(qty1, validItemSchemes(item)) : 0);
     setItemQuery("");
     setShowCart(false);
     setMessage("");
@@ -850,6 +882,19 @@ export default function SalesOrderPage({
       qtyInputRef.current?.focus();
       qtyInputRef.current?.select();
     }, 0);
+    if (!hasCurrentSchemes) try {
+      const detail = await loadItemDetail(item.id);
+      if (requestId !== itemDetailRequestRef.current) return;
+      if (!detail) throw new Error("Item details are unavailable.");
+      setSelectedItem(detail);
+      setQty2(freeForOrderQty(toNumber(qtyInputRef.current?.value ?? qty1), validItemSchemes(detail)));
+    } catch {
+      if (requestId !== itemDetailRequestRef.current) return;
+      setSelectedItem(null);
+      setMessage("Unable to load item details. Please select the item again.");
+    } finally {
+      if (requestId === itemDetailRequestRef.current) setLoadingSelectedItem(false);
+    }
   };
 
   const openCompanyItems = async (company: CompanyRow) => {
@@ -895,7 +940,7 @@ export default function SalesOrderPage({
       return false;
     }
     const q1 = toNumber(qty1);
-    const q2 = toNumber(qty2);
+    const q2 = validItemSchemes(selectedItem).length > 0 ? toNumber(qty2) : 0;
     if (q1 <= 0 && q2 <= 0) {
       setMessage("Enter Qty or Free quantity.");
       return false;
@@ -1377,11 +1422,12 @@ export default function SalesOrderPage({
     }, 250);
   };
 
-  const editCartItem = (item: CartItem) => {
+  const editCartItem = async (item: CartItem) => {
     if (selectedOrder && !canEditSelectedOrder) return;
-    ++itemDetailRequestRef.current;
-    setLoadingSelectedItem(false);
-    setSelectedItem(item);
+    const requestId = ++itemDetailRequestRef.current;
+    const hasCurrentSchemes = Array.isArray(item.Schemes) && item.AsOnDate === todayISODate();
+    setLoadingSelectedItem(!hasCurrentSchemes);
+    setSelectedItem(hasCurrentSchemes ? item : { ...item, Schemes: [] });
     setEditingCartUid(item.uid);
     setQty1(Number(item.Qty1 || 0));
     setQty2(Number(item.Qty2 || 0));
@@ -1393,6 +1439,19 @@ export default function SalesOrderPage({
       qtyInputRef.current?.focus();
       qtyInputRef.current?.select();
     }, 0);
+    if (!hasCurrentSchemes) try {
+      const detail = await loadItemDetail(item.id);
+      if (requestId !== itemDetailRequestRef.current) return;
+      if (!detail) throw new Error("Item details are unavailable.");
+      setSelectedItem({ ...item, ...detail });
+      if (validItemSchemes(detail).length === 0) setQty2(0);
+    } catch {
+      if (requestId !== itemDetailRequestRef.current) return;
+      setSelectedItem(null);
+      setMessage("Unable to load item details. Please select the item again.");
+    } finally {
+      if (requestId === itemDetailRequestRef.current) setLoadingSelectedItem(false);
+    }
   };
 
   const currentStockLabel = (itemId: number) => {
@@ -1404,7 +1463,26 @@ export default function SalesOrderPage({
     <button
       key={`${item.id}-${index}`}
       type="button"
-      onClick={() => selectItemInfo(item)}
+      aria-label={`${item.ItemName}, double tap to select`}
+      onClick={(event) => {
+        if (event.detail === 0) void selectItemInfo(item);
+      }}
+      onDoubleClick={() => {
+        if (Date.now() - lastCompanyTouchSelectionRef.current > 500) void selectItemInfo(item);
+      }}
+      onTouchEnd={(event) => {
+        const now = Date.now();
+        const previous = lastCompanyItemTapRef.current;
+        if (previous?.itemId === item.id && now - previous.time < 400) {
+          event.preventDefault();
+          lastCompanyItemTapRef.current = null;
+          lastCompanyTouchSelectionRef.current = now;
+          void selectItemInfo(item);
+        } else {
+          lastCompanyItemTapRef.current = { itemId: item.id, time: now };
+        }
+      }}
+      style={{ touchAction: "manipulation" }}
       className={`block w-full border-b border-slate-200 px-3 py-3 text-left last:border-b-0 ${
         index % 2 === 0 ? "bg-white" : "bg-sky-50/70"
       }`}
@@ -1440,6 +1518,11 @@ export default function SalesOrderPage({
             <span className="text-emerald-700">{currentStockLabel(selectedItem.id)}</span>
           )}
         </div>
+        {!loadingSelectedItem && validItemSchemes(selectedItem).length > 0 && (
+          <p className="mt-3 whitespace-normal break-words text-sm font-medium text-blue-800">
+            Order Qty+Free: {schemeOrderHint(validItemSchemes(selectedItem))}
+          </p>
+        )}
         <div className="mt-3 grid grid-cols-2 gap-3">
           <FloatingLabelDecimalInput
             ref={qtyInputRef}
@@ -1447,21 +1530,29 @@ export default function SalesOrderPage({
             label="Qty"
             value={qty1}
             minValue={0}
-            onChange={setQty1}
+            onChange={(value) => {
+              setQty1(value);
+              setQty2(freeForOrderQty(value, validItemSchemes(selectedItem)));
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                freeInputRef.current?.focus();
-                freeInputRef.current?.select();
+                if (validItemSchemes(selectedItem).length > 0) {
+                  freeInputRef.current?.focus();
+                  freeInputRef.current?.select();
+                } else {
+                  registerSelectedItem();
+                }
               }
             }}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-right text-base"
           />
           <FloatingLabelDecimalInput
             ref={freeInputRef}
             id="sales-order-free"
             label="Free"
             value={qty2}
+            disabled={loadingSelectedItem || validItemSchemes(selectedItem).length === 0}
             minValue={0}
             onChange={setQty2}
             onKeyDown={(event) => {
@@ -1470,7 +1561,7 @@ export default function SalesOrderPage({
                 registerSelectedItem();
               }
             }}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base"
+            className={`w-full rounded-md border border-slate-300 px-3 py-2 text-right text-base ${freeInputBackground(qty1, qty2, validItemSchemes(selectedItem))}`}
           />
         </div>
         {toNumber(qty2) > toNumber(qty1) && (
