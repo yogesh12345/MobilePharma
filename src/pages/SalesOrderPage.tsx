@@ -125,20 +125,22 @@ const ActionIcon = ({ name }: { name: ActionIconName }) => (
 const BottomActionButton = ({
   label,
   icon,
+  showLabel = false,
   className = "",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   label: string;
   icon: ActionIconName;
+  showLabel?: boolean;
 }) => (
   <button
     {...props}
     aria-label={props["aria-label"] || label}
     title={label}
-    className={`${buttonBase} inline-flex h-10 w-10 items-center justify-center p-2 text-xs ${className}`}
+    className={`${buttonBase} inline-flex h-10 items-center justify-center text-xs ${showLabel ? "w-full gap-1 px-2" : "w-10 p-2"} ${className}`}
   >
     <ActionIcon name={icon} />
-    <span className="sr-only">{label}</span>
+    <span className={showLabel ? "" : "sr-only"}>{label}</span>
   </button>
 );
 
@@ -251,7 +253,12 @@ const normalizedStatus = (status?: string) => String(status || "").trim().toUppe
 
 const canEditSOStatus = (status?: string) => {
   const normalized = normalizedStatus(status);
-  return normalized !== "SUBMITTED" && normalized !== "CANCELLED" && normalized !== "CANCELED";
+  return normalized !== "SUBMITTED" && normalized !== "PROCESSED" && normalized !== "CANCELLED" && normalized !== "CANCELED";
+};
+
+const canCancelSOStatus = (status?: string) => {
+  const normalized = normalizedStatus(status);
+  return normalized !== "PROCESSED" && normalized !== "CANCELLED" && normalized !== "CANCELED";
 };
 
 const addressOf = (row: Partial<Customer & OrderListRow>) =>
@@ -517,6 +524,8 @@ export default function SalesOrderPage({
   const [draftSoNumber, setDraftSoNumber] = useTaskState(task, "draft-so-number", "New", (value): value is string => typeof value === "string");
   const [draftSoDate, setDraftSoDate] = useTaskState(task, "draft-so-date", todayISODate(), (value): value is string => typeof value === "string");
   const [newOrderSavedId, setNewOrderSavedId] = useTaskState<number | null>(task, "saved-order-id", null, (value): value is number | null => value === null || Number.isSafeInteger(value));
+  const [savedOrderStatus, setSavedOrderStatus] = useTaskState<"SAVED" | "SUBMITTED" | null>(task, "saved-order-status", null, (value): value is "SAVED" | "SUBMITTED" | null => value === null || value === "SAVED" || value === "SUBMITTED");
+  const profileOrderStatus = savedOrderStatus ?? (newOrderSavedId ? "SUBMITTED" : null);
   const [savedCartSignature, setSavedCartSignature] = useTaskState(task, "saved-cart-signature", "", (value): value is string => typeof value === "string");
   const [showCart, setShowCart] = useTaskState(task, "show-cart", false, (value): value is boolean => typeof value === "boolean");
   const [shareFormat, setShareFormat] = useState<SalesOrderShareFormat>(() => {
@@ -560,17 +569,17 @@ export default function SalesOrderPage({
 
   useEffect(() => {
     const customerId = selectedCustomer?.id ?? selectedOrder?.customer.id;
-    if (!updateOrderStock || !customerId || newOrderSavedId) return;
+    if (!updateOrderStock || !customerId || (newOrderSavedId && (!customerProfileMode || profileOrderStatus !== "SAVED"))) return;
     const signature = cartSignature(cart);
     if (signature === (selectedOrder ? loadedCartSignature : savedCartSignature)) return;
-    const sync = syncStockDraft(cart, customerId, selectedOrder?.header?.ID ?? 0);
+    const sync = syncStockDraft(cart, customerId, selectedOrder?.header?.ID ?? (customerProfileMode ? newOrderSavedId ?? 0 : 0));
     const sequence = stockDraftSequenceRef.current;
     void sync.catch((error) => {
       if (sequence === stockDraftSequenceRef.current) {
         setMessage(error?.response?.data?.error || "Unable to allocate order stock. Check the quantities before saving.");
       }
     });
-  }, [cart, selectedCustomer, selectedOrder, loadedCartSignature, savedCartSignature, newOrderSavedId, updateOrderStock, syncStockDraft]);
+  }, [cart, selectedCustomer, selectedOrder, loadedCartSignature, savedCartSignature, newOrderSavedId, profileOrderStatus, customerProfileMode, updateOrderStock, syncStockDraft]);
 
   const cartCount = cart.length;
 
@@ -813,6 +822,7 @@ export default function SalesOrderPage({
     setDraftSoDate(todayISODate());
     setShowCart(false);
     setNewOrderSavedId(null);
+    setSavedOrderStatus(null);
     setMessage("");
   };
 
@@ -1085,6 +1095,7 @@ export default function SalesOrderPage({
 
   const saveOrder = async (mode: "save" | "submit" | "update") => {
     if (selectedOrder && !canEditSelectedOrder) return;
+    if (customerProfileMode && newOrderSavedId && profileOrderStatus !== "SAVED") return;
     const customer = selectedCustomer ?? selectedOrder?.customer;
     if (!customer || cart.length === 0) {
       setMessage(customerProfileMode ? "Add at least one item." : "Select a customer and add at least one item.");
@@ -1099,7 +1110,7 @@ export default function SalesOrderPage({
       setBusy(true);
       setMessage("");
       try {
-        await syncStockDraft(cart, customer.id, selectedOrder?.header?.ID ?? 0);
+        await syncStockDraft(cart, customer.id, selectedOrder?.header?.ID ?? (customerProfileMode ? newOrderSavedId ?? 0 : 0));
       } catch (error: any) {
         setMessage(error?.response?.data?.error || "Unable to allocate order stock.");
         setBusy(false);
@@ -1111,17 +1122,24 @@ export default function SalesOrderPage({
       setBusy(true);
       setMessage("");
       try {
-        const { data } = await API.post("/mobile/customer-portal/orders", {
-          draftKey: updateOrderStock ? stockDraftKey : undefined,
-          items: cart.map((item) => ({ itemId: item.id, quantity: item.Qty1, freeQuantity: item.Qty2 })),
-          remark: "Mobile customer order",
+        const endpoint = newOrderSavedId ? `/mobile/customer-portal/orders/${newOrderSavedId}` : "/mobile/customer-portal/orders";
+        const { data } = await API.request({
+          method: newOrderSavedId ? "PUT" : "POST",
+          url: endpoint,
+          data: {
+            draftKey: updateOrderStock ? stockDraftKey : undefined,
+            items: cart.map((item) => ({ itemId: item.id, quantity: item.Qty1, freeQuantity: item.Qty2 })),
+            remark: "Mobile customer order",
+            status: mode === "submit" ? "SUBMITTED" : "SAVED",
+          },
         });
         setNewOrderSavedId(Number(data.id) || null);
+        setSavedOrderStatus(mode === "submit" ? "SUBMITTED" : "SAVED");
         setSavedCartSignature(cartSignature(cart));
         setShowCart(true);
-        setMessage(`Order ${data.soNumber ?? ""} submitted for your linked customer profile.`);
+        setMessage(`Order ${data.soNumber ?? ""} ${mode === "submit" ? "submitted" : "saved"}.`);
       } catch (error: any) {
-        setMessage(error?.response?.data?.error || "Unable to submit sales order.");
+        setMessage(error?.response?.data?.error || "Unable to save sales order.");
       } finally { setBusy(false); }
       return;
     }
@@ -1403,6 +1421,7 @@ export default function SalesOrderPage({
     : "New";
   const selectedOrderStatus = String(selectedOrder?.header?.Status || "");
   const canEditSelectedOrder = canEditSOStatus(selectedOrderStatus);
+  const canCancelSelectedOrder = Boolean(selectedOrder?.header?.ID) && canCancelSOStatus(selectedOrderStatus);
   const reviewHasChanges =
     Boolean(selectedOrder) && loadedCartSignature !== "" && cartSignature(cart) !== loadedCartSignature;
   const printableStatuses = new Set(["SAVED", "SUBMITTED", "CANCELLED", "CANCELED"]);
@@ -1463,8 +1482,36 @@ export default function SalesOrderPage({
     }
   };
 
+  const cancelSelectedOrder = async () => {
+    const orderId = selectedOrder?.header?.ID || newOrderSavedId;
+    if (!orderId || (customerProfileMode ? profileOrderStatus !== "SAVED" : selectedOrder && !canCancelSelectedOrder)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await stockDraftSyncRef.current.catch(() => undefined);
+      await API.post(customerProfileMode ? `/mobile/customer-portal/orders/${orderId}/cancel` : `/so/${orderId}/cancel`);
+      if (selectedOrder) {
+        setSelectedOrder((current) => current ? {
+          ...current,
+          header: { ...current.header, Status: "CANCELLED" },
+          customer: { ...current.customer, Status: "Cancelled" },
+        } : current);
+        await loadOrders();
+      } else {
+        resetEntry();
+      }
+      setMessage("Order cancelled.");
+    } catch (error: unknown) {
+      const responseError = error as { response?: { data?: { error?: string } } };
+      setMessage(responseError.response?.data?.error || "Unable to cancel sales order.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openItemSelection = () => {
     if (selectedOrder && !canEditSelectedOrder) return;
+    if (customerProfileMode && profileOrderStatus === "SUBMITTED") return;
     ++itemDetailRequestRef.current;
     setLoadingSelectedItem(false);
     setShowCart(false);
@@ -1688,6 +1735,7 @@ export default function SalesOrderPage({
 
   const renderEntry = (reviewMode = false) => {
     const itemEntryMode = !showCart && (!reviewMode || reviewAddingItem);
+    const canEditEntry = customerProfileMode ? profileOrderStatus !== "SUBMITTED" : !selectedOrder || canEditSelectedOrder;
     const visibleCompanyItems = companyItems.filter(
       (item) => item.id !== selectedItem?.id,
     );
@@ -1748,10 +1796,11 @@ export default function SalesOrderPage({
 
         {showCart ? (
           <div className="max-h-[calc(100dvh-16rem)] overflow-y-auto divide-y divide-slate-200 pb-2">
+            {customerProfileMode && profileOrderStatus && <div className="px-3 py-2 text-sm font-semibold text-blue-800">Status: {profileOrderStatus === "SAVED" ? "Saved" : "Submitted"}</div>}
             {cart.length === 0 ? (
               <>
                 <div className="p-4 text-sm text-slate-500">No items in cart.</div>
-                {!reviewMode && (
+                {!reviewMode && canEditEntry && (
                   <div className="sticky bottom-0 z-10 bg-white px-3 py-3">
                     <button
                       type="button"
@@ -1782,7 +1831,7 @@ export default function SalesOrderPage({
                   ) : (
                     filteredCart.map((item, index) => (
                       <div key={item.uid} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 px-3 py-3">
-                        {(!selectedOrder || canEditSelectedOrder) ? (
+                        {canEditEntry ? (
                           <button
                             type="button"
                             onClick={() => editCartItem(item)}
@@ -1807,7 +1856,7 @@ export default function SalesOrderPage({
                           <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-slate-700" aria-label={`Quantity ${item.Qty1} plus free ${item.Qty2}`}>
                             ({item.Qty1}+{item.Qty2})
                           </span>
-                          {(!selectedOrder || canEditSelectedOrder) && (
+                          {canEditEntry && (
                             <button
                               type="button"
                               onClick={() => setCart((current) => current.filter((row) => row.uid !== item.uid))}
@@ -1837,7 +1886,7 @@ export default function SalesOrderPage({
                     ))
                   )}
                 </div>
-                {(!reviewMode || canEditSelectedOrder) && (
+                {canEditEntry && (!reviewMode || canEditSelectedOrder) && (
                   <div className="sticky bottom-0 z-10 bg-white px-3 py-3">
                     <button
                       type="button"
@@ -1991,11 +2040,56 @@ export default function SalesOrderPage({
       <div id="sales-order-footer" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
         <div
           className={`mx-auto grid max-w-3xl gap-2 ${
-            itemEntryMode || customerProfileMode ? "grid-cols-2" : reviewMode ? (reviewHasChanges ? "grid-cols-3" : canEditSelectedOrder ? "grid-cols-5" : "grid-cols-3") :
+            customerProfileMode ? (profileOrderStatus === "SAVED" ? "grid-cols-4" : profileOrderStatus === "SUBMITTED" ? "grid-cols-1" : "grid-cols-3") : itemEntryMode ? "grid-cols-2" : reviewMode ? (reviewHasChanges ? "grid-cols-4" : canEditSelectedOrder ? "grid-cols-5" : canCancelSelectedOrder ? "grid-cols-3" : "grid-cols-2") :
               newOrderSavedId ? "grid-cols-2" : cart.length > 0 ? "grid-cols-4" : "grid-cols-2"
           }`}
         >
-          {itemEntryMode ? (
+          {customerProfileMode ? (
+            <>
+              <BottomActionButton
+                type="button"
+                disabled={busy}
+                onClick={itemEntryMode ? exitItemSelection : () => { resetEntry(); onBackToHome?.(); }}
+                label="Back"
+                icon="back"
+                showLabel
+                className="border border-blue-300 bg-white text-blue-700"
+              />
+              {profileOrderStatus !== "SUBMITTED" && (
+                <BottomActionButton
+                  type="button"
+                  disabled={busy || cart.length === 0 || Boolean(selectedItem)}
+                  onClick={() => void saveOrder("save")}
+                  label="Save"
+                  icon="save"
+                  showLabel
+                  className="bg-amber-500 text-white"
+                />
+              )}
+              {profileOrderStatus !== "SUBMITTED" && (
+                <BottomActionButton
+                  type="button"
+                  disabled={busy || cart.length === 0 || Boolean(selectedItem)}
+                  onClick={() => void saveOrder("submit")}
+                  label="Submit"
+                  icon="submit"
+                  showLabel
+                  className="bg-emerald-600 text-white"
+                />
+              )}
+              {newOrderSavedId && profileOrderStatus === "SAVED" && (
+                <BottomActionButton
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void cancelSelectedOrder()}
+                  label="Cancel"
+                  icon="cancel"
+                  showLabel
+                  className="bg-red-700 text-white"
+                />
+              )}
+            </>
+          ) : itemEntryMode ? (
             <>
               <BottomActionButton
                 type="button"
@@ -2007,15 +2101,10 @@ export default function SalesOrderPage({
               <BottomActionButton
                 type="button"
                 onClick={exitItemSelection}
-                label="Cancel"
+                label="Cancel item"
                 icon="cancel"
                 className="border border-slate-300 bg-white text-slate-700"
               />
-            </>
-          ) : customerProfileMode ? (
-            <>
-              <BottomActionButton type="button" onClick={() => { resetEntry(); onBackToHome?.(); }} label="Back" icon="back" className={`${buttonBase} border border-blue-300 bg-white text-blue-700`} />
-              {!newOrderSavedId && <BottomActionButton type="button" disabled={busy || cart.length === 0} onClick={() => void saveOrder("submit")} label="Send" icon="submit" className={`${buttonBase} bg-emerald-600 text-white`} />}
             </>
           ) : reviewMode ? (
             <>
@@ -2083,6 +2172,16 @@ export default function SalesOrderPage({
                   )}
                 </>
               )}
+              {canCancelSelectedOrder && (
+                <BottomActionButton
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void cancelSelectedOrder()}
+                  label="Cancel order"
+                  icon="cancel"
+                  className={`${buttonBase} bg-red-700 text-white`}
+                />
+              )}
             </>
           ) : newOrderSavedId ? (
               <>
@@ -2092,6 +2191,14 @@ export default function SalesOrderPage({
                   label="New"
                   icon="new"
                   className={`${buttonBase} bg-blue-600 text-white`}
+                />
+                <BottomActionButton
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void cancelSelectedOrder()}
+                  label="Cancel order"
+                  icon="cancel"
+                  className={`${buttonBase} bg-red-700 text-white`}
                 />
               </>
             ) : cart.length === 0 ? (
