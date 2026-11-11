@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { useTaskState } from "../hooks/useTaskState";
 import API from "../services/api";
 import GenericAutoComplete from "../components/GenericAutoComplete";
@@ -387,6 +387,8 @@ const cartSignature = (rows: CartItem[]) =>
       itemId: row.id || 0,
       qty1: Number(row.Qty1 || 0),
       qty2: Number(row.Qty2 || 0),
+      schmQty: Number(row.SchmQty || 0),
+      schmFree: Number(row.SchmFree || 0),
     })),
   );
 
@@ -459,8 +461,9 @@ export default function SalesOrderPage({
 }: SalesOrderPageProps) {
   const access = useMobileAccess();
   const isInternal = access.data?.account.kind === "INTERNAL";
+  const updateOrderStock = access.data?.account.UPDORDER2STOCK === true;
   const [showTotalQty, setShowTotalQty] = useState(false);
-  const { stockByItemId, requestStock } = useCurrentStock(showTotalQty && isInternal, todayISODate());
+  const { stockByItemId, requestStock, refreshStock } = useCurrentStock(showTotalQty && isInternal, todayISODate());
   useEffect(() => {
     if (!isInternal) return;
     let active = true;
@@ -479,6 +482,16 @@ export default function SalesOrderPage({
   const [selectedOrder, setSelectedOrder] = useTaskState<LoadedOrder | null>(task, "order", null, (value): value is LoadedOrder | null => value === null || (typeof value === "object" && value !== null && typeof (value as LoadedOrder).header === "object"));
   const [customerQuery, setCustomerQuery] = useTaskState(task, "customer-query", "", (value): value is string => typeof value === "string");
   const [cart, setCart] = useTaskState<CartItem[]>(task, "cart", [], (value): value is CartItem[] => Array.isArray(value));
+  const [stockDraftKey] = useState(() => {
+    const storageKey = `${task}:stock-draft-key`;
+    const stored = window.sessionStorage.getItem(storageKey);
+    if (stored && /^O[A-Za-z0-9]{1,9}$/.test(stored)) return stored;
+    const generated = `O${crypto.randomUUID().replaceAll("-", "").slice(0, 9)}`;
+    window.sessionStorage.setItem(storageKey, generated);
+    return generated;
+  });
+  const stockDraftSyncRef = useRef<Promise<unknown>>(Promise.resolve());
+  const stockDraftSequenceRef = useRef(0);
   const [loadedCartSignature, setLoadedCartSignature] = useTaskState(task, "loaded-cart-signature", "", (value): value is string => typeof value === "string");
   const [cartSearch, setCartSearch] = useTaskState(task, "cart-search", "", (value): value is string => typeof value === "string");
   const [itemQuery, setItemQuery] = useTaskState(task, "item-query", "", (value): value is string => typeof value === "string");
@@ -520,6 +533,44 @@ export default function SalesOrderPage({
   const lastCompanyTouchSelectionRef = useRef(0);
   const entryCardRef = useRef<HTMLElement>(null);
   const selectedItemId = selectedItem?.id;
+
+  const syncStockDraft = useCallback((items: CartItem[], customerId: number, orderId = 0) => {
+    ++stockDraftSequenceRef.current;
+    const payload = {
+      draftKey: stockDraftKey,
+      customerId,
+      orderId,
+      clearOnly: items.length === 0,
+      items: items.map((item) => ({ itemId: item.id, qty1: item.Qty1, qty2: item.Qty2, schmQty: item.SchmQty, schmFree: item.SchmFree })),
+    };
+    const next = stockDraftSyncRef.current.catch(() => undefined).then(() => API.put("/mobile/sales-orders/stock-draft", payload)).then((response) => {
+      refreshStock(items);
+      return response;
+    });
+    stockDraftSyncRef.current = next;
+    return next;
+  }, [stockDraftKey, refreshStock]);
+
+  const clearStockDraft = (customerId: number, orderId = 0) => {
+    void syncStockDraft([], customerId, orderId).catch((error: unknown) => {
+      const apiError = error as { response?: { data?: { error?: string } } };
+      setMessage(apiError.response?.data?.error || "Unable to release order stock.");
+    });
+  };
+
+  useEffect(() => {
+    const customerId = selectedCustomer?.id ?? selectedOrder?.customer.id;
+    if (!updateOrderStock || !customerId || newOrderSavedId) return;
+    const signature = cartSignature(cart);
+    if (signature === (selectedOrder ? loadedCartSignature : savedCartSignature)) return;
+    const sync = syncStockDraft(cart, customerId, selectedOrder?.header?.ID ?? 0);
+    const sequence = stockDraftSequenceRef.current;
+    void sync.catch((error) => {
+      if (sequence === stockDraftSequenceRef.current) {
+        setMessage(error?.response?.data?.error || "Unable to allocate order stock. Check the quantities before saving.");
+      }
+    });
+  }, [cart, selectedCustomer, selectedOrder, loadedCartSignature, savedCartSignature, newOrderSavedId, updateOrderStock, syncStockDraft]);
 
   const cartCount = cart.length;
 
@@ -738,6 +789,8 @@ export default function SalesOrderPage({
   }, [selectedItemId]);
 
   const resetEntry = () => {
+    const customerId = selectedCustomer?.id ?? selectedOrder?.customer.id;
+    if (updateOrderStock && customerId) clearStockDraft(customerId, selectedOrder?.header?.ID ?? 0);
     ++itemDetailRequestRef.current;
     setLoadingSelectedItem(false);
     if (!customerProfileMode) setSelectedCustomer(null);
@@ -764,6 +817,8 @@ export default function SalesOrderPage({
   };
 
   const openCustomerOrder = (customer: Customer) => {
+    const previousCustomerId = selectedCustomer?.id ?? selectedOrder?.customer.id;
+    if (updateOrderStock && previousCustomerId) clearStockDraft(previousCustomerId, selectedOrder?.header?.ID ?? 0);
     ++itemDetailRequestRef.current;
     setLoadingSelectedItem(false);
     setSelectedCustomer(customer);
@@ -1040,11 +1095,24 @@ export default function SalesOrderPage({
       return;
     }
 
+    if (updateOrderStock) {
+      setBusy(true);
+      setMessage("");
+      try {
+        await syncStockDraft(cart, customer.id, selectedOrder?.header?.ID ?? 0);
+      } catch (error: any) {
+        setMessage(error?.response?.data?.error || "Unable to allocate order stock.");
+        setBusy(false);
+        return;
+      }
+    }
+
     if (customerProfileMode) {
       setBusy(true);
       setMessage("");
       try {
         const { data } = await API.post("/mobile/customer-portal/orders", {
+          draftKey: updateOrderStock ? stockDraftKey : undefined,
           items: cart.map((item) => ({ itemId: item.id, quantity: item.Qty1, freeQuantity: item.Qty2 })),
           remark: "Mobile customer order",
         });
@@ -1065,6 +1133,7 @@ export default function SalesOrderPage({
     try {
       if (selectedOrder?.header?.ID) {
         await API.put(`/so/${selectedOrder.header.ID}`, {
+          draftKey: updateOrderStock ? stockDraftKey : undefined,
           header: {
             ...selectedOrder.header,
             id: selectedOrder.header.ID,
@@ -1093,6 +1162,7 @@ export default function SalesOrderPage({
       }
 
       const createResponse = await API.post("/so", {
+        draftKey: updateOrderStock ? stockDraftKey : undefined,
         header: {
           CustId: customer.id,
           SODate: toApiDateTime(draftSoDate),
@@ -1138,8 +1208,12 @@ export default function SalesOrderPage({
     setMessage("");
     try {
       const res = await API.get(`/so/${row.ID}`);
+      const previousCustomerId = selectedCustomer?.id ?? selectedOrder?.customer.id;
+      if (updateOrderStock && previousCustomerId) clearStockDraft(previousCustomerId, selectedOrder?.header?.ID ?? 0);
       const header = res.data?.header ?? {};
-      const rows = Array.isArray(res.data?.rows) ? res.data.rows : [];
+      const rows = Array.isArray(res.data?.reviewRows)
+        ? res.data.reviewRows
+        : Array.isArray(res.data?.rows) ? res.data.rows : [];
       const mappedCustomer = customers.find((item) => item.id === Number(header.CustId || row.CustId));
       const customer: Customer = {
         id: Number(header.CustId || row.ID),
@@ -1206,8 +1280,10 @@ export default function SalesOrderPage({
 
   const revertReviewChanges = () => {
     if (!selectedOrder) return;
-    setCart(selectedOrder.rows);
-    setLoadedCartSignature(cartSignature(selectedOrder.rows));
+    if (updateOrderStock) clearStockDraft(selectedOrder.customer.id, selectedOrder.header?.ID ?? 0);
+    const originalRows = distinctCartItems(selectedOrder.rows);
+    setCart(originalRows);
+    setLoadedCartSignature(cartSignature(originalRows));
     setSelectedItem(null);
     setEditingCartUid(null);
     setReviewAddingItem(false);
@@ -1354,6 +1430,8 @@ export default function SalesOrderPage({
 
   const backFromEntry = (reviewMode: boolean) => {
     if (reviewMode) {
+      const customerId = selectedOrder?.customer.id ?? selectedCustomer?.id;
+      if (updateOrderStock && customerId) clearStockDraft(customerId, selectedOrder?.header?.ID ?? 0);
       ++itemDetailRequestRef.current;
       setLoadingSelectedItem(false);
       setSelectedOrder(null);
@@ -1936,7 +2014,7 @@ export default function SalesOrderPage({
             </>
           ) : customerProfileMode ? (
             <>
-              <BottomActionButton type="button" onClick={onBackToHome ?? resetEntry} label="Back" icon="back" className={`${buttonBase} border border-blue-300 bg-white text-blue-700`} />
+              <BottomActionButton type="button" onClick={() => { resetEntry(); onBackToHome?.(); }} label="Back" icon="back" className={`${buttonBase} border border-blue-300 bg-white text-blue-700`} />
               {!newOrderSavedId && <BottomActionButton type="button" disabled={busy || cart.length === 0} onClick={() => void saveOrder("submit")} label="Send" icon="submit" className={`${buttonBase} bg-emerald-600 text-white`} />}
             </>
           ) : reviewMode ? (
