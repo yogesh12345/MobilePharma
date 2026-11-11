@@ -42,3 +42,35 @@ export async function openInvoicePdf(invoiceId: number, invoiceYear: number): Pr
     throw error;
   }
 }
+
+export async function openSalesOrderPdf(orderId: number, orderNumber: string, customerPortal: boolean | "recent" = false): Promise<void> {
+  const tab = Capacitor.getPlatform() === "web" ? window.open("", "_blank") : null;
+  try {
+    const response = await API.get(customerPortal === "recent" ? `/mobile/recent-sales-orders/${orderId}/pdf` : customerPortal ? `/mobile/customer-portal/orders/${orderId}/pdf` : `/so/${orderId}/pdf`, {
+      params: { layout: "selection" },
+      responseType: "blob",
+      timeout: 120000,
+    });
+    const pdf = new Blob([response.data], { type: "application/pdf" });
+    const fileName = `${orderNumber.replace(/[^a-zA-Z0-9_-]/g, "_") || `SO-${orderId}`}.pdf`;
+
+    if (Capacitor.isNativePlatform()) {
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+        reader.onerror = () => reject(new Error("Unable to read sales order PDF."));
+        reader.readAsDataURL(pdf);
+      });
+      await documentOpener.open({ data, fileName });
+      return;
+    }
+
+    const url = URL.createObjectURL(pdf);
+    if (tab) tab.location.href = url;
+    else window.open(url, "_blank");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    tab?.close();
+    throw error;
+  }
+}

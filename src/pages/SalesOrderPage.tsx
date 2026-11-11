@@ -8,6 +8,8 @@ import { sendMedia, sendText } from "../services/whatsappService";
 import { useMobileAccess } from "../context/mobileAccess";
 import { formatStock } from "../utils/stockDisplay";
 import { useCurrentStock } from "../hooks/useCurrentStock";
+import { openSalesOrderPdf } from "../services/invoicePdf";
+import { EyeIcon } from "@heroicons/react/24/outline";
 
 type Customer = {
   id: number;
@@ -518,8 +520,11 @@ export default function SalesOrderPage({
   const [reviewAddingItem, setReviewAddingItem] = useTaskState(task, "review-adding-item", false, (value): value is boolean => typeof value === "boolean");
   const [qty1, setQty1] = useTaskState(task, "qty1", 1, (value): value is number => typeof value === "number" && Number.isFinite(value));
   const [qty2, setQty2] = useTaskState(task, "qty2", 0, (value): value is number => typeof value === "number" && Number.isFinite(value));
+  const [freeEntryOverride, setFreeEntryOverride] = useState(false);
+  const lastQtyTapRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [viewingOrderId, setViewingOrderId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [draftSoNumber, setDraftSoNumber] = useTaskState(task, "draft-so-number", "New", (value): value is string => typeof value === "string");
   const [draftSoDate, setDraftSoDate] = useTaskState(task, "draft-so-date", todayISODate(), (value): value is string => typeof value === "string");
@@ -881,6 +886,7 @@ export default function SalesOrderPage({
   };
 
   const handleItemSelect = async (item: { id: number | string; label1: string; label2?: string; item?: unknown }) => {
+    setFreeEntryOverride(false);
     const detailFromSearch = item.item as ItemInfo | undefined;
     if (detailFromSearch && Number(detailFromSearch.id) === Number(item.id) && detailFromSearch.ItemName) {
       await selectItemInfo(detailFromSearch);
@@ -931,6 +937,7 @@ export default function SalesOrderPage({
   };
 
   const selectItemInfo = async (item: ItemInfo) => {
+    setFreeEntryOverride(false);
     const requestId = ++itemDetailRequestRef.current;
     const hasCurrentSchemes = Array.isArray(item.Schemes) && item.AsOnDate === todayISODate();
     setLoadingSelectedItem(!hasCurrentSchemes);
@@ -1005,7 +1012,7 @@ export default function SalesOrderPage({
       return false;
     }
     const q1 = toNumber(qty1);
-    const q2 = validItemSchemes(selectedItem).length > 0 ? toNumber(qty2) : 0;
+    const q2 = freeEntryOverride || validItemSchemes(selectedItem).length > 0 ? toNumber(qty2) : 0;
     if (q1 <= 0 && q2 <= 0) {
       setMessage("Enter Qty or Free quantity.");
       return false;
@@ -1053,6 +1060,7 @@ export default function SalesOrderPage({
     });
     setItemQuery("");
     setSelectedItem(null);
+    setFreeEntryOverride(false);
     setEditingCartUid(null);
     setQty1(1);
     setQty2(0);
@@ -1405,6 +1413,19 @@ export default function SalesOrderPage({
     }
   };
 
+  const viewOrderPdf = async (order: OrderListRow) => {
+    if (viewingOrderId !== null) return;
+    setViewingOrderId(order.ID);
+    setMessage("");
+    try {
+      await openSalesOrderPdf(order.ID, order.SONumber);
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error || error?.message || "Unable to view sales order PDF.");
+    } finally {
+      setViewingOrderId(null);
+    }
+  };
+
   const updateShareFormat = (format: SalesOrderShareFormat) => {
     setShareFormat(format);
     window.localStorage.setItem("sales-order-share-format", format);
@@ -1553,6 +1574,7 @@ export default function SalesOrderPage({
     const hasCurrentSchemes = Array.isArray(item.Schemes) && item.AsOnDate === todayISODate();
     setLoadingSelectedItem(!hasCurrentSchemes);
     setSelectedItem(hasCurrentSchemes ? item : { ...item, Schemes: [] });
+    setFreeEntryOverride(Number(item.Qty2 || 0) > 0 && validItemSchemes(item).length === 0);
     setEditingCartUid(item.uid);
     setQty1(Number(item.Qty1 || 0));
     setQty2(Number(item.Qty2 || 0));
@@ -1569,7 +1591,9 @@ export default function SalesOrderPage({
       if (requestId !== itemDetailRequestRef.current) return;
       if (!detail) throw new Error("Item details are unavailable.");
       setSelectedItem({ ...item, ...detail });
-      if (validItemSchemes(detail).length === 0) setQty2(0);
+      if (validItemSchemes(detail).length === 0) {
+        setFreeEntryOverride(Number(item.Qty2 || 0) > 0);
+      }
     } catch {
       if (requestId !== itemDetailRequestRef.current) return;
       setSelectedItem(null);
@@ -1649,20 +1673,39 @@ export default function SalesOrderPage({
           </p>
         )}
         <div className="mt-3 grid grid-cols-2 gap-3">
+          <div
+            onDoubleClick={() => {
+              if (loadingSelectedItem || validItemSchemes(selectedItem).length > 0) return;
+              setFreeEntryOverride(true);
+              window.setTimeout(() => freeInputRef.current?.focus(), 0);
+            }}
+            onTouchEnd={() => {
+              if (loadingSelectedItem || validItemSchemes(selectedItem).length > 0) return;
+              const now = Date.now();
+              if (now - lastQtyTapRef.current < 400) {
+                setFreeEntryOverride(true);
+                window.setTimeout(() => freeInputRef.current?.focus(), 0);
+                lastQtyTapRef.current = 0;
+              } else {
+                lastQtyTapRef.current = now;
+              }
+            }}
+          >
           <FloatingLabelDecimalInput
             ref={qtyInputRef}
             id="sales-order-qty"
             label="Qty"
+            width="w-full"
             value={qty1}
             minValue={0}
             onChange={(value) => {
               setQty1(value);
-              setQty2(freeForOrderQty(value, validItemSchemes(selectedItem)));
+              if (!freeEntryOverride) setQty2(freeForOrderQty(value, validItemSchemes(selectedItem)));
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                if (validItemSchemes(selectedItem).length > 0) {
+                if (freeEntryOverride || validItemSchemes(selectedItem).length > 0) {
                   freeInputRef.current?.focus();
                   freeInputRef.current?.select();
                 } else {
@@ -1672,12 +1715,13 @@ export default function SalesOrderPage({
             }}
             className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-right text-base"
           />
+          </div>
           <FloatingLabelDecimalInput
             ref={freeInputRef}
             id="sales-order-free"
             label="Free"
             value={qty2}
-            disabled={loadingSelectedItem || validItemSchemes(selectedItem).length === 0}
+            disabled={loadingSelectedItem || (!freeEntryOverride && validItemSchemes(selectedItem).length === 0)}
             minValue={0}
             onChange={setQty2}
             onKeyDown={(event) => {
@@ -1689,6 +1733,9 @@ export default function SalesOrderPage({
             className={`w-full rounded-md border border-slate-300 px-3 py-2 text-right text-base ${freeInputBackground(qty1, qty2, validItemSchemes(selectedItem))}`}
           />
         </div>
+        {!loadingSelectedItem && validItemSchemes(selectedItem).length === 0 && !freeEntryOverride && (
+          <p className="mt-2 text-xs text-slate-600">Double tap Qty to enable Free entry.</p>
+        )}
         {toNumber(qty2) > toNumber(qty1) && (
           <p role="alert" className="mt-2 text-sm font-medium text-red-700">Free quantity cannot be greater than Qty.</p>
         )}
@@ -2346,26 +2393,38 @@ export default function SalesOrderPage({
         <>
           <div className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
             {filteredOrders.map((order, index) => (
-              <button
+              <div
                 key={order.ID}
-                type="button"
-                onClick={() => void openReviewOrder(order)}
-                className={`block w-full border-b border-slate-200 px-3 py-3 text-left text-sm transition last:border-b-0 hover:bg-blue-50 ${
+                className={`border-b border-slate-200 px-3 py-3 text-sm last:border-b-0 ${
                   index % 2 === 0 ? "bg-white" : "bg-sky-50/60"
                 }`}
               >
-                <span className="flex min-w-0 items-center justify-between gap-3">
-                  <span className="min-w-0 truncate font-bold text-slate-900">{order.CustomerName}</span>
-                  <span className="shrink-0 font-bold text-blue-800">
-                    <CartCountIcon count={order.NumItems || 0} compact />
+                <button type="button" onClick={() => void openReviewOrder(order)} className="block w-full text-left hover:text-blue-700">
+                  <span className="flex min-w-0 items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-bold text-slate-900">{order.CustomerName}</span>
+                    <span className="shrink-0 font-bold text-blue-800">
+                      <CartCountIcon count={order.NumItems || 0} compact />
+                    </span>
                   </span>
-                </span>
-                <span className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2 text-xs text-slate-600">
-                  <span className="min-w-0 truncate">{order.SONumber}</span>
-                  <span className="shrink-0">{displayDateTime(order.SODate)}</span>
-                  <span className="max-w-[6rem] truncate text-right font-bold text-slate-700">{order.Status}</span>
-                </span>
-              </button>
+                </button>
+                <div className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-2 text-xs text-slate-600">
+                  <button type="button" onClick={() => void openReviewOrder(order)} className="col-span-3 grid grid-cols-subgrid items-center text-left hover:text-blue-700">
+                    <span className="min-w-0 truncate">{order.SONumber}</span>
+                    <span className="shrink-0">{displayDateTime(order.SODate)}</span>
+                    <span className="max-w-[6rem] truncate text-right font-bold text-slate-700">{order.Status}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void viewOrderPdf(order)}
+                    disabled={viewingOrderId !== null}
+                    aria-label={`View sales order ${order.SONumber} as PDF`}
+                    title="View PDF"
+                    className="grid h-9 w-9 place-items-center rounded-md text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                  >
+                    <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
             ))}
             {orderStatuses.length > 0 && filteredOrders.length === 0 && (
               <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 px-4 py-8 text-center text-sm text-slate-600">
