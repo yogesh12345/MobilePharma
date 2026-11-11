@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import API from "../services/api";
 import GenericAutoComplete from "../components/GenericAutoComplete";
 import SalesOrderPage from "./SalesOrderPage";
-import { ArrowLeftIcon, EyeIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, CheckIcon, EyeIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useTaskState } from "../hooks/useTaskState";
 import { useMobileAccess } from "../context/mobileAccess";
 import { openSalesOrderPdf } from "../services/invoicePdf";
@@ -80,21 +80,26 @@ export default function PortalOrders({ onBack }: { onBack: () => void }) {
   catch (error) { setError((error as { response?: { data?: { error?: string } }; message?: string }).response?.data?.error || (error as Error).message || "Unable to view sales order PDF."); }
   finally { setViewingOrderId(null); }
  };
- const save = async () => {
-  if (selected?.status.toUpperCase() !== "SAVED") return;
+ const save = async (submit = false) => {
+  if (busy || selected?.status.toUpperCase() !== "SAVED" || !items.length) return;
   setBusy(true);setError("");setNotice("");
-  try { if (updateOrderStock) await syncStock(items, selected.id); await API.put(`/mobile/customer-portal/orders/${selected.id}`,{ items,remark,draftKey: updateOrderStock ? draftKey : undefined });setNotice("Order updated.");setSelected(null);await load(); } catch (error) { setError(errorText(error)); } finally { setBusy(false); }
+  try { if (updateOrderStock) await syncStock(items, selected.id); await API.put(`/mobile/customer-portal/orders/${selected.id}`,{ items,remark,status: submit ? "SUBMITTED" : "SAVED",draftKey: updateOrderStock ? draftKey : undefined });setNotice(submit ? "Order submitted." : "Order updated.");setSelected(null);await load(); } catch (error) { setError(errorText(error)); } finally { setBusy(false); }
+ };
+ const cancel = async () => {
+  if (busy || selected?.status.toUpperCase() !== "SAVED") return;
+  setBusy(true);setError("");setNotice("");
+  try { await stockSyncRef.current.catch(() => undefined); await API.post(`/mobile/customer-portal/orders/${selected.id}/cancel`); if (updateOrderStock) clearStock(selected.id); setNotice("Order cancelled.");setSelected(null);await load(); } catch (error) { setError(errorText(error)); } finally { setBusy(false); }
  };
  if (creating) return <SalesOrderPage customerProfileMode onBackToHome={() => { setCreating(false);void load(); }} />;
  const editable = selected?.status.toUpperCase() === "SAVED";
- return <section className="mx-auto max-w-3xl space-y-4 px-1 py-1 sm:px-4 sm:py-4">
+ return <section className={`mx-auto max-w-3xl space-y-4 px-1 pt-1 sm:px-4 sm:pt-4 ${editable ? "pb-32 sm:pb-24" : "pb-1 sm:pb-4"}`}>
   <h2 className="text-xl font-bold">Orders</h2>
   {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error}</p>}{notice && <p role="status" className="rounded bg-green-50 p-3 text-green-800">{notice}</p>}
   <button className="rounded bg-blue-700 px-4 py-3 font-semibold text-white" onClick={() => setCreating(true)}>Place a new order</button>
   {selected ? <section className="space-y-4 rounded-xl border bg-white p-4"><h3 className="font-bold">{selected.soNumber} / {selected.status}</h3>
    {editable && <GenericAutoComplete endpoint="/mobile/sales-orders/items/search" searchQuery={query} setSearchQuery={setQuery} minChars={3} mode="live" topLabel="Add an item" onSelect={item => { const id = Number(item.id);setItems(current => current.some(row => row.itemId === id) ? current : [...current,{ itemId:id,itemName:item.label1,quantity:1,freeQuantity:0 }]);setQuery(""); }} />}
-   {items.map(item => <div key={item.itemId} className="space-y-2 border-t pt-3"><p className="font-semibold">{item.itemName}</p><div className="flex flex-wrap items-end gap-3"><label className="text-sm">Quantity<input aria-label={`Quantity for ${item.itemName}`} disabled={!editable || busy} className="mt-1 block w-24 rounded border px-2 py-2" type="number" min={0} max={10000} value={item.quantity} onChange={event => setItems(current => current.map(row => row.itemId === item.itemId ? { ...row,quantity:Number(event.target.value) } : row))} /></label><label className="text-sm">Free<input aria-label={`Free quantity for ${item.itemName}`} disabled={!editable || busy} className="mt-1 block w-24 rounded border px-2 py-2" type="number" min={0} max={10000} value={item.freeQuantity} onChange={event => setItems(current => current.map(row => row.itemId === item.itemId ? { ...row,freeQuantity:Number(event.target.value) } : row))} /></label>{editable && <button disabled={busy} className="py-2 text-red-700 underline" onClick={() => setItems(current => current.filter(row => row.itemId !== item.itemId))}>Remove</button>}</div></div>)}
-   <label className="block text-sm">Remark<textarea disabled={!editable || busy} className="mt-1 w-full rounded border p-2" maxLength={1000} value={remark} onChange={event => setRemark(event.target.value)} /></label><div className="flex gap-3">{editable && <button disabled={busy || !items.length} className="rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50" onClick={() => void save()}>Save changes</button>}<button className="rounded border px-4 py-2" onClick={() => { if (updateOrderStock && editable) clearStock(selected.id); setSelected(null); }}>Close</button></div>{!editable && <p className="text-sm text-slate-500">This order is already being processed and cannot be changed.</p>}
+   {items.map(item => <div key={item.itemId} className="space-y-2 border-t pt-3"><p className="font-semibold">{item.itemName}</p><div className="flex flex-wrap items-end gap-3"><label className="text-sm">Quantity<input aria-label={`Quantity for ${item.itemName}`} disabled={!editable || busy} className="mt-1 block w-24 rounded border px-2 py-2" type="number" min={0} max={10000} value={item.quantity} onChange={event => setItems(current => current.map(row => row.itemId === item.itemId ? { ...row,quantity:Number(event.target.value) } : row))} /></label><label className="text-sm">Free<input aria-label={`Free quantity for ${item.itemName}`} disabled={!editable || busy} className="mt-1 block w-24 rounded border px-2 py-2" type="number" min={0} max={10000} value={item.freeQuantity} onChange={event => setItems(current => current.map(row => row.itemId === item.itemId ? { ...row,freeQuantity:Number(event.target.value) } : row))} /></label>{editable && <button type="button" disabled={busy} aria-label={`Remove ${item.itemName}`} title="Remove item" className="rounded-lg p-2 text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50" onClick={() => setItems(current => current.filter(row => row.itemId !== item.itemId))}><TrashIcon className="h-5 w-5" aria-hidden="true" /></button>}</div></div>)}
+   <label className="block text-sm">Remark<textarea disabled={!editable || busy} className="mt-1 w-full rounded border p-2" maxLength={1000} value={remark} onChange={event => setRemark(event.target.value)} /></label>{!editable && <p className="text-sm text-slate-500">This order is already being processed and cannot be changed.</p>}
   </section> : orders.length > 0 ? (
    <div ref={orderListRef} className="overflow-auto overscroll-contain rounded-xl border border-slate-300 bg-white shadow-sm">
     <table className="w-full min-w-[350px] border-collapse text-left text-[11px] sm:text-sm">
@@ -119,6 +124,6 @@ export default function PortalOrders({ onBack }: { onBack: () => void }) {
     </table>
    </div>
   ) : <p className="text-slate-500">No orders yet.</p>}
-  <div id="customer-portal-footer" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"><div className="mx-auto max-w-3xl"><button type="button" onClick={() => { if (updateOrderStock && editable && selected) clearStock(selected.id); onBack(); }} aria-label="Back" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 font-semibold text-blue-700 hover:bg-blue-50"><ArrowLeftIcon className="h-5 w-5" aria-hidden="true" /><span>Back</span></button></div></div>
+  <div id="customer-portal-footer" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"><div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2"><button type="button" disabled={busy} onClick={() => { if (updateOrderStock && editable && selected) clearStock(selected.id); onBack(); }} aria-label="Back" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><ArrowLeftIcon className="h-5 w-5" aria-hidden="true" /><span>Back</span></button>{editable && <><button type="button" disabled={busy || !items.length} onClick={() => void save()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-700 px-4 font-semibold text-white disabled:opacity-50">Save changes</button><button type="button" disabled={busy || !items.length} onClick={() => void save(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-emerald-600 px-4 font-semibold text-white disabled:opacity-50"><CheckIcon className="h-5 w-5" aria-hidden="true" />Submit</button><button type="button" disabled={busy} onClick={() => void cancel()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-red-700 px-4 font-semibold text-white disabled:opacity-50"><TrashIcon className="h-5 w-5" aria-hidden="true" />Remove</button></>}</div></div>
  </section>;
 }
