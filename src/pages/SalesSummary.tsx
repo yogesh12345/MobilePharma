@@ -52,7 +52,7 @@ export default function SalesSummary() {
   const displayRows = useMemo(() => kinds.filter(kind => selected.includes(kind)).map(kind => ({
     kind, rows: (summary?.rows ?? []).filter(row => row.invoiceType === kind).sort((a, b) => a.bucket.localeCompare(b.bucket)), total: summary?.totals?.[kind],
   })), [summary, selected]);
-  const grand = selected.length === 2 ? summary?.grandTotal : selected.length === 1 ? summary?.totals?.[selected[0]] : null;
+  const grand = selected.length === 2 ? summary?.grandTotal : null;
   if (!allowed) return null;
   const totalCells = (row: Row) => <><td className="px-1.5 py-2 text-right">{row.invoiceCount}</td><td className="px-1.5 py-2 text-right">{money(row.invoiceAmount)}</td><td className="px-1.5 py-2 text-right">{row.uniqueCustomers}</td><td className="px-1.5 py-2 text-right">{money(row.averageInvoiceAmount)}</td></>;
   return <section className="space-y-4 rounded-xl border border-blue-200 bg-white p-4 text-slate-900">
@@ -62,18 +62,17 @@ export default function SalesSummary() {
       {period === "specifiedDate" && <label className="text-sm font-medium">Date<input className="mt-1 w-full rounded-lg border border-slate-300 p-3" type="date" value={date} onChange={event => setDate(event.target.value)} /></label>}
       {period === "specifiedMonth" && <label className="text-sm font-medium">Month<input className="mt-1 w-full rounded-lg border border-slate-300 p-3" type="month" value={month} onChange={event => setMonth(event.target.value)} /></label>}
     </div>
-    <fieldset><legend className="mb-2 text-sm font-medium">Invoice Type</legend><div className="flex gap-5">{kinds.map(kind => <label key={kind} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(kind)} onChange={event => setSelected(current => event.target.checked ? [...current, kind] : current.filter(item => item !== kind))} />{kind} Sales</label>)}</div></fieldset>
+    <fieldset><legend className="mb-2 text-sm font-medium">Invoice Type</legend><div className="flex gap-5">{kinds.map(kind => <label key={kind} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(kind)} onChange={event => setSelected(current => event.target.checked ? [...current, kind] : current.length === 1 ? kinds.filter(item => item !== kind) : current.filter(item => item !== kind))} />{kind} Sales</label>)}</div></fieldset>
     <div className="flex rounded-lg bg-slate-100 p-1" role="group" aria-label="Summary view"><button type="button" onClick={() => setView("report")} className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${view === "report" ? "bg-white text-blue-800 shadow" : "text-slate-600"}`}>Summary Report</button><button type="button" onClick={() => setView("chart")} className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold ${view === "chart" ? "bg-white text-blue-800 shadow" : "text-slate-600"}`}>Bar Chart</button></div>
     {!isMonth && value && <h3 className="font-semibold text-blue-950">{fullDate(value)}</h3>}
     {isMonth && value && <h3 className="font-semibold text-blue-950">{new Date(`${value}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</h3>}
     {loading && <p role="status" className="text-sm">Loading summary…</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-    {!loading && summary && selected.length === 0 && <p className="text-sm text-slate-600">Select Cash Sales or Credit Sales.</p>}
-    {!loading && summary && selected.length > 0 && view === "report" && <div className="max-h-[70dvh] overflow-auto rounded-lg border border-slate-200"><table className="w-full min-w-[720px] border-collapse text-xs sm:text-sm"><thead className="sticky top-0 z-10 bg-blue-50 text-blue-950"><tr><th rowSpan={2} className="px-1.5 py-2 text-left">{isMonth ? "Date" : "Time slot"}</th><th colSpan={2} className="px-1.5 pt-2 text-center">Invoice Nos.</th><th rowSpan={2} className="px-1.5 py-2 text-right">No. of Invoices</th><th rowSpan={2} className="px-1.5 py-2 text-right">Total Invoice Amount</th><th rowSpan={2} className="px-1.5 py-2 text-right">Unique Customers</th><th rowSpan={2} className="px-1.5 py-2 text-right">Avg. Invoice Amount</th></tr><tr><th className="px-1.5 pb-2 text-left">Start</th><th className="px-1.5 pb-2 text-left">End</th></tr></thead><tbody>
+    {!loading && summary && view === "report" && <div className="max-h-[70dvh] overflow-auto rounded-lg border border-slate-200"><table className="w-full min-w-[720px] border-collapse text-xs sm:text-sm"><thead className="sticky top-0 z-10 bg-blue-50 text-blue-950"><tr><th rowSpan={2} className="px-1.5 py-2 text-left">{isMonth ? "Date" : "Time slot"}</th><th colSpan={2} className="px-1.5 pt-2 text-center">Invoice Nos.</th><th rowSpan={2} className="px-1.5 py-2 text-right">No. of Invoices</th><th rowSpan={2} className="px-1.5 py-2 text-right">Total Invoice Amount</th><th rowSpan={2} className="px-1.5 py-2 text-right">Unique Customers</th><th rowSpan={2} className="px-1.5 py-2 text-right">Avg. Invoice Amount</th></tr><tr><th className="px-1.5 pb-2 text-left">Start</th><th className="px-1.5 pb-2 text-left">End</th></tr></thead><tbody>
       {displayRows.map(({ kind, rows, total }) => <FragmentRows key={kind} kind={kind} rows={rows} total={total} isMonth={isMonth} totalCells={totalCells} />)}
       {grand && <tr className="border-t-2 border-blue-300 bg-blue-50 font-bold"><th colSpan={3} className="px-1.5 py-2 text-left">Grand Total</th>{totalCells(grand)}</tr>}
     </tbody></table></div>}
-    {!loading && summary && selected.length > 0 && view === "chart" && <SalesBarChart rows={summary.rows} selected={selected} isMonth={isMonth} />}
+    {!loading && summary && view === "chart" && <SalesBarChart rows={summary.rows} selected={selected} isMonth={isMonth} />}
   </section>;
 }
 
@@ -83,8 +82,10 @@ function FragmentRows({ kind, rows, total, isMonth, totalCells }: { kind: Type; 
     {rows.length === 0 && <tr><td colSpan={7} className="px-1.5 py-2 text-slate-500">No invoices</td></tr>}
     {rows.map(row => <tr key={row.bucket} className="border-t border-slate-100">
       <td className="whitespace-nowrap px-1.5 py-2">{isMonth ? dayLabel(row.bucket) : timeLabel(row.bucket)}</td>
-      <td className="whitespace-nowrap px-1.5 py-2">{row.startInvoiceNo}</td>
-      <td className="whitespace-nowrap px-1.5 py-2">{row.endInvoiceNo}</td>
+      {row.invoiceCount === 1 ? <td colSpan={2} className="whitespace-nowrap px-1.5 py-2 text-center">{row.startInvoiceNo || row.endInvoiceNo}</td> : <>
+        <td className="whitespace-nowrap px-1.5 py-2">{row.startInvoiceNo}</td>
+        <td className="whitespace-nowrap px-1.5 py-2">{row.endInvoiceNo}</td>
+      </>}
       {totalCells(row)}
     </tr>)}
     {total && <tr className="border-t border-slate-300 bg-slate-50 font-semibold"><th colSpan={3} className="px-1.5 py-2 text-left">{kind} Total</th>{totalCells(total)}</tr>}
