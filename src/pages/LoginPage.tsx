@@ -1,10 +1,11 @@
 import MobileVerification from "./MobileVerification";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import API, { setApiToken } from "../services/api";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import AnimatedBackground from "../components/AnimatedBackground";
-import { removeStoredPermissions, setStoredToken } from "../services/storage";
+import { removeStoredPermissions, setRememberDevice, setStoredToken } from "../services/storage";
+import { passkeyServiceAvailable, signInWithPasskey } from "../services/passkeys";
 
 interface LoginPageProps {
   onLogin: (identifier?: string) => void;
@@ -16,7 +17,11 @@ const getErrorMessage = (error: unknown) => {
       response?: { data?: { error?: string } };
       code?: string;
       message?: string;
+      name?: string;
     };
+    if (maybeAxios.name === "NotAllowedError") {
+      return "Device sign-in was cancelled or no passkey is available for this site. Sign in with your password, then open Menu → Device sign-in to set up a passkey on this device.";
+    }
     if (!maybeAxios.response && maybeAxios.message === "Network Error") {
       return "Unable to connect to PharmaSys API from this app URL. Please check backend CORS access.";
     }
@@ -34,6 +39,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [rememberDevice, setRememberDeviceChoice] = useState(false);
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
+
+  useEffect(() => {
+    void passkeyServiceAvailable().then(setPasskeyAvailable);
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,6 +66,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       await removeStoredPermissions();
       setApiToken(token);
       await setStoredToken(token);
+      setRememberDevice(rememberDevice);
       onLogin(identifier.trim());
     } catch (err) {
       setError(getErrorMessage(err));
@@ -62,6 +74,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       setBusy(false);
     }
   };
+
+  const handlePasskeySignIn = useCallback(async () => {
+    try {
+      setBusy(true);
+      setError("");
+      const { token, username } = await signInWithPasskey();
+      if (!token) throw new Error("Sign-in succeeded but no token was returned.");
+      await removeStoredPermissions();
+      setApiToken(token);
+      await setStoredToken(token);
+      setRememberDevice(rememberDevice);
+      onLogin(username);
+    } catch (reason) {
+      if ((reason as { name?: string })?.name !== "NotAllowedError") setError(getErrorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }, [onLogin, rememberDevice]);
 
   if (verification) return <MobileVerification mode={verification} onBack={() => setVerification(null)} />;
 
@@ -98,6 +128,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
               {error}
             </div>
+          )}
+
+          <label className="flex items-start gap-3 text-sm text-slate-700">
+            <input type="checkbox" checked={rememberDevice} onChange={event => setRememberDeviceChoice(event.target.checked)} className="mt-1 h-4 w-4" />
+            <span>Stay signed in on this phone for up to 30 days. Use only on a private phone with a screen lock.</span>
+          </label>
+
+          {passkeyAvailable && (
+            <button type="button" disabled={busy} onClick={() => void handlePasskeySignIn()} className="w-full rounded-lg border border-blue-600 px-4 py-3 font-semibold text-blue-700 disabled:opacity-60">
+              Sign in with passkey
+            </button>
           )}
 
           <button

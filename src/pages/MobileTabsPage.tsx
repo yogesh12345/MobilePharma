@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowsRightLeftIcon, IdentificationIcon, KeyIcon, UsersIcon } from "@heroicons/react/24/outline";
+import { ArrowsRightLeftIcon, FingerPrintIcon, IdentificationIcon, KeyIcon, UsersIcon } from "@heroicons/react/24/outline";
 import { useMobileAccess } from "../context/mobileAccess";
 import MobileTeam from "./MobileTeam";
 import MobileVerification from "./MobileVerification";
@@ -20,6 +20,7 @@ import CompaniesPage from "./CompaniesPage";
 import CustomersPage from "./CustomersPage";
 import SalesOrderPage, { type CustomerUpdate } from "./SalesOrderPage";
 import Profile from "./Profile";
+import PasskeySettings from "./PasskeySettings";
 import CustomerPortalPage from "./CustomerPortalPage";
 import { customerIdentityFromLinkedCustomer, customerIdentityFromProfile, type CustomerIdentity } from "./profileForm";
 
@@ -124,6 +125,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   const access = useMobileAccess();
   const [teamOpen, setTeamOpen] = useState(() => readNavigation(navigationKey(0, null)).shellView === "team");
   const [credentialsOpen, setCredentialsOpen] = useState(() => readNavigation(navigationKey(0, null)).shellView === "credentials");
+  const [passkeysOpen, setPasskeysOpen] = useState(() => readNavigation(navigationKey(0, null)).shellView === "passkeys");
   const { canAccess, loading: permissionsLoading } = usePermissions();
   const [activeModule, setActiveModule] = useState<MobileModule | null>(() => {
     const saved = readNavigation(navigationKey(0, null)).module;
@@ -235,9 +237,9 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
   }, [access.loading, permissionsLoading, selectedModule]);
   useEffect(() => {
     saveNavigation(navigationKey(0, null), {
-      shellView: credentialsOpen ? "credentials" : teamOpen ? "team" : profileOpen ? "profile" : null,
+      shellView: credentialsOpen ? "credentials" : passkeysOpen ? "passkeys" : teamOpen ? "team" : profileOpen ? "profile" : null,
     });
-  }, [credentialsOpen, teamOpen, profileOpen]);
+  }, [credentialsOpen, passkeysOpen, teamOpen, profileOpen]);
   const customerExperience = Boolean(access.data);
   const needsCustomerSelection = Boolean(access.data?.account.kind === "EXTERNAL" && access.data.customers.length > 0 && !access.customer);
   const showCustomerHeader = customerExperience && !profileOpen && customerIdentity;
@@ -263,6 +265,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
     setProfileOpen(false);
     setTeamOpen(false);
     setCredentialsOpen(false);
+    setPasskeysOpen(false);
     setMenuOpen(false);
     setCustomerPortalKey((current) => current + 1);
   };
@@ -354,8 +357,8 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
           <div aria-hidden="true" className={`pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden text-blue-900/25 ${profileOpen ? "pt-8 sm:pt-0" : ""}`}>
             <span className="whitespace-nowrap text-xl font-black leading-none tracking-wide sm:text-2xl">PharmaSys</span>
           </div>
-          {profileOpen ? (
-            <h1 className="relative min-w-0 text-lg font-bold text-blue-900">Profile</h1>
+          {profileOpen || passkeysOpen ? (
+            <h1 className="relative min-w-0 text-lg font-bold text-blue-900">{passkeysOpen ? "Device sign-in" : "Profile"}</h1>
           ) : showCustomerHeader ? (
             <div className="relative min-w-0 flex-1 overflow-hidden py-0.5" aria-label="Customer identity">
               <div className="relative break-words text-blue-950">
@@ -411,6 +414,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
                   {access.data?.account.kind === "EXTERNAL" && access.can("admin") && <button type="button" role="menuitem" onClick={() => { goHome();setTeamOpen(true); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><UsersIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Our Users</button>}
                   {access.data?.account.kind === "INTERNAL" && Boolean(access.customer) && <button type="button" role="menuitem" onClick={() => { goHome();access.selectCustomer(null); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><ArrowsRightLeftIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Internal tasks and customers</button>}
                   <button type="button" role="menuitem" onClick={() => { goHome();setCredentialsOpen(true); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><KeyIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Login credentials</button>
+                  <button type="button" role="menuitem" onClick={() => { goHome();setPasskeysOpen(true); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50"><FingerPrintIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} aria-hidden="true" />Device sign-in</button>
                   <button
                     type="button"
                     role="menuitem"
@@ -426,7 +430,7 @@ export default function MobileTabsPage({ onLogout, initialUserName }: MobileTabs
         </div>
       </header>
 
-      {access.loading ? <p className="p-5 text-center text-slate-600">Loading your account...</p> : access.error ? <div role="alert" className="mx-auto max-w-lg space-y-3 p-5"><p>{access.error}</p><div className="flex flex-wrap gap-4"><button type="button" className="text-blue-700 underline" onClick={() => void access.reload()}>Retry</button><button type="button" className="text-blue-700 underline" onClick={onLogout}>Sign in again</button></div></div> : credentialsOpen ? <MobileVerification mode="credentials" onBack={goHome} onComplete={onLogout} /> : needsCustomerSelection ? <section className="mx-auto max-w-3xl space-y-3 p-5"><h1 className="text-xl font-bold">Select a customer</h1><p className="text-sm text-slate-600">Choose an assigned customer to continue.</p>{access.data?.customers.map(customer => <button className="block w-full rounded-xl border border-blue-200 bg-white p-4 text-left hover:bg-blue-50" key={customer.customerId} onClick={() => { access.selectCustomer(customer.customerId);goHome(); }}><span className="block font-bold">{customer.customerName}</span><span className="text-sm text-slate-600">{customer.gstNo}</span></button>)}</section> : teamOpen && access.data?.account.kind === "EXTERNAL" && access.can("admin") ? <MobileTeam onBack={goHome} /> : profileOpen && access.can("profile") ? (
+      {access.loading ? <p className="p-5 text-center text-slate-600">Loading your account...</p> : access.error ? <div role="alert" className="mx-auto max-w-lg space-y-3 p-5"><p>{access.error}</p><div className="flex flex-wrap gap-4"><button type="button" className="text-blue-700 underline" onClick={() => void access.reload()}>Retry</button><button type="button" className="text-blue-700 underline" onClick={onLogout}>Sign in again</button></div></div> : credentialsOpen ? <MobileVerification mode="credentials" onBack={goHome} onComplete={onLogout} /> : passkeysOpen ? <PasskeySettings onBack={goHome} /> : needsCustomerSelection ? <section className="mx-auto max-w-3xl space-y-3 p-5"><h1 className="text-xl font-bold">Select a customer</h1><p className="text-sm text-slate-600">Choose an assigned customer to continue.</p>{access.data?.customers.map(customer => <button className="block w-full rounded-xl border border-blue-200 bg-white p-4 text-left hover:bg-blue-50" key={customer.customerId} onClick={() => { access.selectCustomer(customer.customerId);goHome(); }}><span className="block font-bold">{customer.customerName}</span><span className="text-sm text-slate-600">{customer.gstNo}</span></button>)}</section> : teamOpen && access.data?.account.kind === "EXTERNAL" && access.can("admin") ? <MobileTeam onBack={goHome} /> : profileOpen && access.can("profile") ? (
         <Profile onOpenCredentials={() => { setProfileOpen(false);setCredentialsOpen(true); }} onBack={() => setProfileOpen(false)} onCredentialsChanged={onLogout} onProfileSaved={(profile) => { setActiveModule(null);  setCustomerIdentityState({ customerId:access.customer?.customerId ?? 0,identity:customerIdentityFromProfile(profile) }); }} />
       ) : customerExperience ? (
         <CustomerPortalPage key={`${customerPortalKey}:${access.customer?.customerId ?? "viewer"}`} linked={linkedCustomer} />

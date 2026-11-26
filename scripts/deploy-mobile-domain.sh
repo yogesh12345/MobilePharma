@@ -11,6 +11,11 @@ if [ ! -f package.json ] || [ ! -f package-lock.json ]; then
     exit 1
 fi
 
+if [ ! -f .env.web ] || ! grep -Eq '^VITE_API_BASE_URL=/$' .env.web; then
+    echo "Expected .env.web with VITE_API_BASE_URL=/ for the mobile hostname" >&2
+    exit 1
+fi
+
 # This build requires the account-access API; do not replace the live app
 # when the Go service is still running an older version.
 node scripts/check-mobile-backend.mjs

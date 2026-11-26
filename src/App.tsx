@@ -8,9 +8,11 @@ import {
   PermissionProvider,
 } from "./context/PermissionContext";
 import API, { setApiToken } from "./services/api";
-import { getStoredToken, removeStoredToken, TOKEN_KEY } from "./services/storage";
+import { getStoredToken, rememberDeviceEnabled, removeStoredToken, TOKEN_KEY } from "./services/storage";
 import { clearNavigation } from "./services/navigationState";
 import { clearInteractionTime, ensureInteractionTime, idleExpired, IDLE_LIMIT_MS, LAST_ACTIVITY_KEY, lastInteraction, recordInteraction } from "./services/idleSession";
+import { autoPasskeyEnabled } from "./services/passkeys";
+import { Capacitor } from "@capacitor/core";
 
 type AuthState = "checking" | "authenticated" | "guest";
 
@@ -18,6 +20,7 @@ export default function App() {
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [loggedInUserName, setLoggedInUserName] = useState("User");
   const authEpoch = useRef(0);
+  const startupPasskeyCheck = useRef<Promise<void> | null>(null);
 
   const logout = useCallback(async () => {
     authEpoch.current += 1;
@@ -49,6 +52,15 @@ export default function App() {
 
     const checkSession = async () => {
       const epoch = authEpoch.current;
+      if (!startupPasskeyCheck.current) {
+        startupPasskeyCheck.current = (async () => {
+          if (Capacitor.isNativePlatform() && await autoPasskeyEnabled()) {
+            setApiToken(null);
+            await removeStoredToken();
+          }
+        })();
+      }
+      await startupPasskeyCheck.current;
       const token = await getStoredToken();
       if (disposed || epoch !== authEpoch.current) return;
 
@@ -60,18 +72,18 @@ export default function App() {
       }
 
       ensureInteractionTime();
-      if (idleExpired()) { void logout(); return; }
+      if (!rememberDeviceEnabled() && idleExpired()) { void logout(); return; }
       setApiToken(token);
 
       try {
         await API.get("/me");
         if (disposed || epoch !== authEpoch.current) return;
-        if (idleExpired()) { void logout(); return; }
+        if (!rememberDeviceEnabled() && idleExpired()) { void logout(); return; }
         setAuthState("authenticated");
       } catch (error) {
         const maybeAxios = error as { response?: { status?: number } };
         if (disposed || epoch !== authEpoch.current) return;
-        if (idleExpired()) { void logout(); return; }
+        if (!rememberDeviceEnabled() && idleExpired()) { void logout(); return; }
 
         if (maybeAxios.response?.status === 401) {
           setAuthState("guest");
@@ -100,6 +112,7 @@ export default function App() {
 
   useEffect(() => {
     if (authState !== "authenticated") return;
+    if (rememberDeviceEnabled()) return;
     let timer: number | undefined;
     let lastWrite = lastInteraction() ?? 0;
     const schedule = () => {

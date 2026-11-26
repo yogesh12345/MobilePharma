@@ -4,6 +4,12 @@ const canUsePreferences =
   typeof window !== "undefined" && typeof Preferences?.get === "function";
 
 export const TOKEN_KEY = "pharmasys_token";
+export const REMEMBER_DEVICE_KEY = "pharmasys:remember-device";
+export const rememberDeviceEnabled = () => localStorage.getItem(REMEMBER_DEVICE_KEY) === "1";
+export const setRememberDevice = (enabled: boolean) => {
+  if (enabled) localStorage.setItem(REMEMBER_DEVICE_KEY, "1");
+  else localStorage.removeItem(REMEMBER_DEVICE_KEY);
+};
 export const ACTIVE_TAB_KEY = "mobileActiveTab";
 export const PERMISSIONS_KEY = "mobilePermissions";
 
@@ -46,7 +52,10 @@ export async function removeStoredValue(key: string) {
 
 export const getStoredToken = () => getStoredValue(TOKEN_KEY);
 export const setStoredToken = (token: string) => setStoredValue(TOKEN_KEY, token);
-export const removeStoredToken = () => removeStoredValue(TOKEN_KEY);
+export const removeStoredToken = async () => {
+  setRememberDevice(false);
+  await removeStoredValue(TOKEN_KEY);
+};
 export const getStoredPermissions = () => getStoredValue(PERMISSIONS_KEY);
 export const setStoredPermissions = (permissions: string) =>
   setStoredValue(PERMISSIONS_KEY, permissions);
